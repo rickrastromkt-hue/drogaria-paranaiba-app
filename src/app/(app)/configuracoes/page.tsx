@@ -153,13 +153,13 @@ function MessagesForm() {
                   value={form.menuStyle}
                   onChange={(e) => setForm({ ...form, menuStyle: e.target.value as Settings["menuStyle"] })}
                 >
-                  <option value="buttons">Botões (o cliente toca na opção)</option>
-                  <option value="list">Lista de opções (abre um menu ao tocar)</option>
-                  <option value="text">Texto com números (1 / 2)</option>
+                  <option value="text">Texto com números (1 / 2) — recomendado</option>
+                  <option value="buttons">Botões (pode não aparecer em alguns celulares)</option>
+                  <option value="list">Lista de opções (pode não aparecer em alguns celulares)</option>
                 </select>
                 {form.menuStyle !== "text" && (
                   <p className="mt-1 text-xs text-slate-400">
-                    Alguns aparelhos/versões do WhatsApp não exibem botões. Se a Z-API recusar o envio, o menu em texto é usado no lugar.
+                    Atenção: a Z-API não usa a API oficial da Meta, e muitos celulares não exibem botões/listas — o cliente pode não receber nada. Teste antes de usar.
                   </p>
                 )}
               </div>

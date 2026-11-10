@@ -56,6 +56,8 @@ export const zapi = {
       message,
       optionList: { title: "Opções", buttonLabel, options },
     }),
+  /** Confere se o número tem WhatsApp. */
+  phoneExists: (phone: string) => call<{ exists: boolean; phone?: string }>("GET", `/phone-exists/${phone}`),
   status: () =>
     call<{ connected: boolean; smartphoneConnected?: boolean; error?: string }>("GET", "/status"),
   qrCodeImage: () => call<{ value?: string }>("GET", "/qr-code/image"),

@@ -1,5 +1,5 @@
 import "server-only";
-import { FieldValue, type DocumentReference } from "firebase-admin/firestore";
+import { FieldValue, type DocumentReference, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import { adminDb } from "./firebase-admin";
 import { HttpError } from "./api";
 import { parseContent, previewOf, zapi, type ZapiReceived, type ZapiStatus } from "./zapi";
@@ -8,6 +8,7 @@ import {
   DEFAULT_SETTINGS,
   renderTemplate,
   type ClosedBy,
+  type Contact,
   type Message,
   type MessageType,
   type Settings,
@@ -171,6 +172,9 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
       if (dup.exists) return { action: "none", ticketId: ref.id };
     }
 
+    // Todas as leituras antes de qualquer escrita (regra das transações do Firestore).
+    const counterSnap = !ref ? await tx.get(counterRef) : null;
+
     const incoming: PendingMessage = { id: msgId, ...content, createdAt: now };
     let backlog: PendingMessage[] = [];
 
@@ -215,15 +219,9 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
     let isNew = false;
     let protocol = "";
     if (!ref) {
-      const counter = await tx.get(counterRef);
-      // Protocolo = AAAAMMDD-NNN, sequência reinicia a cada dia.
-      const day = todayKey();
-      const c = counter.data();
-      const seq = c?.day === day ? ((c?.daySeq as number) || 0) + 1 : 1;
-      protocol = `${day}-${String(seq).padStart(3, "0")}`;
+      protocol = nextProtocol(tx, counterSnap!);
       ref = db().collection("tickets").doc();
       isNew = true;
-      tx.set(counterRef, { day, daySeq: seq }, { merge: true });
     }
 
     tx.set(contactRef, { ...base, activeTicketId: ref.id, lastTicketId: ref.id }, { merge: true });
@@ -267,6 +265,109 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
 
     return { action: isNew ? "welcome" : "none", ticketId: ref.id, isNew };
   });
+}
+
+/** Protocolo = AAAAMMDD-NNN, sequência reinicia a cada dia. Grava o contador na transação. */
+function nextProtocol(tx: Transaction, counter: DocumentSnapshot): string {
+  const day = todayKey();
+  const c = counter.data();
+  const seq = c?.day === day ? ((c?.daySeq as number) || 0) + 1 : 1;
+  tx.set(counter.ref, { day, daySeq: seq }, { merge: true });
+  return `${day}-${String(seq).padStart(3, "0")}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Iniciar conversa (pela farmácia)                                    */
+/* ------------------------------------------------------------------ */
+
+/** Variações do número com/sem o 9º dígito (o WhatsApp às vezes usa o formato antigo). */
+function phoneVariants(phone: string) {
+  const v = [phone];
+  if (phone.length === 13 && phone[4] === "9") v.push(phone.slice(0, 4) + phone.slice(5));
+  if (phone.length === 12) v.push(phone.slice(0, 4) + "9" + phone.slice(4));
+  return v;
+}
+
+async function resolveWhatsappPhone(phone: string): Promise<string> {
+  const variants = phoneVariants(phone);
+  // Se já existe contato com alguma variação, usa ele (mantém o mesmo histórico).
+  for (const v of variants) if ((await db().doc(`contacts/${v}`).get()).exists) return v;
+  let checked = false;
+  for (const v of variants) {
+    try {
+      const r = await zapi.phoneExists(v);
+      checked = true;
+      if (r.exists) return safeId(r.phone || v);
+    } catch (e) {
+      console.error("phone-exists", e);
+    }
+  }
+  if (checked) throw new HttpError(400, "Este número não tem WhatsApp");
+  return phone; // Z-API não respondeu: tenta mesmo assim
+}
+
+export async function startConversation(user: StaffUser, rawPhone: string, text: string, nameHint?: string) {
+  const typed = normalizePhone(rawPhone);
+  if (typed.length < 12 || typed.length > 13) throw new HttpError(400, "Número inválido. Use DDD + número.");
+  if (!text.trim()) throw new HttpError(400, "Escreva a primeira mensagem");
+  const phone = await resolveWhatsappPhone(typed);
+
+  const contactRef = db().doc(`contacts/${phone}`);
+  const counterRef = db().doc("meta/counters");
+  const now = Date.now();
+
+  const { ticketId, created } = await db().runTransaction(async (tx) => {
+    const cs = await tx.get(contactRef);
+    const c = cs.data() as Contact | undefined;
+    const activeRef = c?.activeTicketId ? ticketRef(c.activeTicketId) : null;
+    const activeSnap = activeRef ? await tx.get(activeRef) : null;
+    const counterSnap = await tx.get(counterRef);
+
+    const active = activeSnap?.exists ? (activeSnap.data() as Ticket) : null;
+    if (activeRef && active && active.status !== "closed") {
+      if (active.status === "open" && active.assignedTo !== user.uid && user.role !== "admin")
+        throw new HttpError(409, `Este cliente já está em atendimento com ${active.assignedName}`);
+      if (active.status === "waiting")
+        tx.update(activeRef, { status: "open", assignedTo: user.uid, assignedName: user.name, assignedAt: now, awaitingCustomerSince: null });
+      return { ticketId: activeRef.id, created: false };
+    }
+
+    const name = (c?.saved && c?.name) || nameHint?.trim() || c?.name || phone;
+    const ref = db().collection("tickets").doc();
+    const tk: Omit<Ticket, "id"> = {
+      protocol: nextProtocol(tx, counterSnap),
+      phone,
+      contactName: name,
+      contactPhoto: c?.photo ?? null,
+      status: "open",
+      assignedTo: user.uid,
+      assignedName: user.name,
+      createdAt: now,
+      assignedAt: now,
+      lastMessageAt: now,
+      lastMessagePreview: "",
+      lastMessageFromMe: true,
+      awaitingCustomerSince: null,
+      unread: 0,
+    };
+    tx.set(ref, tk);
+    tx.set(
+      contactRef,
+      {
+        phone,
+        name,
+        activeTicketId: ref.id,
+        lastTicketId: ref.id,
+        menu: { pendingSince: null, pending: [], financeAt: null },
+      },
+      { merge: true }
+    );
+    return { ticketId: ref.id, created: true };
+  });
+
+  if (created) await addSystemNote(ticketRef(ticketId), `${user.name} iniciou a conversa`);
+  await agentSend(ticketId, user, { type: "text", text: text.trim() });
+  return { ticketId };
 }
 
 /* ---------- Menu inicial: tipos e helpers ---------- */

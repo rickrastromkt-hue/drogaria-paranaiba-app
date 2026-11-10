@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { Inbox, Loader2, MessageCircleHeart, Search } from "lucide-react";
+import { Inbox, Loader2, MessageCircleHeart, MessageSquarePlus, Search } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { relative, useNow } from "@/lib/client";
 import { useQuickReplies, useSettings, useTeam } from "@/lib/hooks";
@@ -10,6 +10,7 @@ import type { Ticket } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
 import { Avatar } from "@/components/Avatar";
 import { ChatPanel } from "@/components/ChatPanel";
+import { NewConversation } from "@/components/NewConversation";
 
 type Tab = "mine" | "queue" | "team";
 
@@ -24,6 +25,17 @@ export default function AtendimentosPage() {
   const quickReplies = useQuickReplies();
   const { settings } = useSettings();
   const now = useNow(30_000);
+  const [newConv, setNewConv] = useState<{ phone?: string } | null>(null);
+  const justStarted = useRef<string | null>(null);
+
+  // /atendimentos?nova=5534999999999 abre "Nova conversa" já com o contato (vindo de Contatos).
+  useEffect(() => {
+    const phone = new URLSearchParams(window.location.search).get("nova");
+    if (phone) {
+      setNewConv({ phone });
+      window.history.replaceState(null, "", "/atendimentos");
+    }
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db(), "tickets"), where("status", "in", ["waiting", "open"]));
@@ -63,7 +75,8 @@ export default function AtendimentosPage() {
 
   // Se o atendimento selecionado for encerrado, sai dele.
   useEffect(() => {
-    if (selectedId && !loading && !tickets.some((t) => t.id === selectedId)) setSelectedId(null);
+    if (selectedId && !loading && !tickets.some((t) => t.id === selectedId) && justStarted.current !== selectedId) setSelectedId(null);
+    if (selectedId && tickets.some((t) => t.id === selectedId) && justStarted.current === selectedId) justStarted.current = null;
   }, [tickets, selectedId, loading]);
 
   // Só no momento em que EU pego o atendimento aberto, muda para "Meus".
@@ -87,7 +100,12 @@ export default function AtendimentosPage() {
       {/* Lista */}
       <section className={`w-full shrink-0 flex-col border-r border-slate-200/70 bg-white md:flex md:w-[340px] lg:w-[380px] ${selected ? "hidden" : "flex"}`}>
         <div className="space-y-3 px-4 pb-3 pt-4">
-          <h1 className="text-lg font-semibold text-slate-800">Atendimentos</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold text-slate-800">Atendimentos</h1>
+            <button onClick={() => setNewConv({})} className="btn btn-soft px-3 py-1.5" title="Iniciar conversa">
+              <MessageSquarePlus className="h-4 w-4" /> Nova conversa
+            </button>
+          </div>
           <div className="flex rounded-xl bg-slate-100 p-1">
             {TABS.map(({ id, label }) => {
               const count = groups[id].length;
@@ -169,6 +187,20 @@ export default function AtendimentosPage() {
           )}
         </div>
       </section>
+
+      {newConv && (
+        <NewConversation
+          initialPhone={newConv.phone}
+          onClose={() => setNewConv(null)}
+          onStarted={(id) => {
+            justStarted.current = id;
+            setNewConv(null);
+            setSearch("");
+            setTab("mine");
+            setSelectedId(id);
+          }}
+        />
+      )}
 
       {/* Conversa */}
       <section className={`min-w-0 flex-1 ${selected ? "block" : "hidden md:block"}`}>

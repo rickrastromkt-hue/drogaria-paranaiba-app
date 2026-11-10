@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, onSnapshot } from "firebase/firestore";
-import { BadgeCheck, BookUser, History, Loader2, Plus, Search, X } from "lucide-react";
+import { BadgeCheck, BookUser, History, Loader2, MessageSquarePlus, Plus, Search, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { formatPhone, relative, useNow } from "@/lib/client";
 import { formatCpf, onlyDigits } from "@/lib/br";
@@ -149,6 +149,9 @@ export default function ContatosPage() {
               {current && (
                 <div className="mb-5 flex flex-col items-center gap-2 text-center">
                   <Avatar name={current.name} photo={current.photo} size={64} />
+                  <Link href={`/atendimentos?nova=${current.phone}`} className="btn btn-primary text-xs">
+                    <MessageSquarePlus className="h-3.5 w-3.5" /> Iniciar conversa
+                  </Link>
                   {current.lastTicketId && (
                     <Link href={`/historico?q=${current.phone}`} className="btn btn-soft text-xs">
                       <History className="h-3.5 w-3.5" /> Ver atendimentos
