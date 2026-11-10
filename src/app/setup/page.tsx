@@ -13,12 +13,16 @@ export default function SetupPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     fetch("/api/setup")
-      .then((r) => r.json())
-      .then((d) => setNeeded(!!d.needed))
-      .catch(() => setNeeded(false));
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || "Erro no servidor");
+        setNeeded(!!d.needed);
+      })
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Erro no servidor"));
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -47,7 +51,13 @@ export default function SetupPage() {
           <Logo className="h-24" />
           <h1 className="text-xl font-semibold">Configuração inicial</h1>
         </div>
-        {needed === null ? (
+        {loadError ? (
+          <div className="card space-y-2 p-6 text-sm text-slate-600">
+            <p className="font-medium text-accent-600">O servidor não conseguiu acessar o Firebase.</p>
+            <p>Confira as variáveis FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL e FIREBASE_PRIVATE_KEY (conta de serviço).</p>
+            <p className="break-all text-xs text-slate-400">{loadError}</p>
+          </div>
+        ) : needed === null ? (
           <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-brand-600" /></div>
         ) : !needed ? (
           <div className="card p-6 text-center text-sm text-slate-600">
