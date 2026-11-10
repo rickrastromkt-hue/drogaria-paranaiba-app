@@ -28,10 +28,28 @@ export default function AtendimentosPage() {
   const now = useNow(30_000);
   const [newConv, setNewConv] = useState<{ phone?: string } | null>(null);
   const justStarted = useRef<string | null>(null);
+  const openFromLink = useRef<string | null>(null);
+  useEffect(() => {
+    const h = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      openFromLink.current = id;
+      setSelectedId(id);
+      setTickets((x) => [...x]); // reavalia a aba
+    };
+    window.addEventListener("open-ticket", h);
+    return () => window.removeEventListener("open-ticket", h);
+  }, []);
 
   // /atendimentos?nova=5534999999999 abre "Nova conversa" já com o contato (vindo de Contatos).
   useEffect(() => {
-    const phone = new URLSearchParams(window.location.search).get("nova");
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get("t");
+    if (openId) {
+      openFromLink.current = openId;
+      setSelectedId(openId);
+      window.history.replaceState(null, "", "/atendimentos");
+    }
+    const phone = params.get("nova");
     if (phone) {
       setNewConv({ phone });
       window.history.replaceState(null, "", "/atendimentos");
@@ -60,6 +78,17 @@ export default function AtendimentosPage() {
   useEffect(() => {
     if (!loading && tab === null) setTab(groups.mine.length ? "mine" : "queue");
   }, [loading, tab, groups.mine.length]);
+
+  // Aberto pelo aviso de nova mensagem: vai para a aba certa.
+  useEffect(() => {
+    const id = openFromLink.current;
+    if (!id || loading) return;
+    const tk = tickets.find((x) => x.id === id);
+    openFromLink.current = null;
+    if (!tk) return;
+    setTab(tk.status === "waiting" ? "queue" : tk.assignedTo === staff?.uid ? "mine" : "team");
+  }, [loading, tickets, staff?.uid]);
+
 
   const current = tab ? groups[tab] : [];
   const term = search.trim().toLowerCase();

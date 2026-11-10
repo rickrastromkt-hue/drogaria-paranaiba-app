@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { BookUser, History, Loader2, LogOut, MessageCircle, Settings, Users } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { api, playNotification } from "@/lib/client";
+import { api } from "@/lib/client";
+import { Notifier } from "@/components/Notifier";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
 import { Credit } from "@/components/Credit";
@@ -25,59 +26,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [waiting, setWaiting] = useState(0);
-  const known = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (!loading && (!user || !staff?.active)) router.replace("/login");
   }, [loading, user, staff, router]);
-
-  // Fila: contador + bipe/notificação quando chega cliente novo.
-  useEffect(() => {
-    if (!staff?.active) return;
-    if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission();
-    const q = query(collection(db(), "tickets"), where("status", "==", "waiting"));
-    return onSnapshot(q, (snap) => {
-      setWaiting(snap.size);
-      const ids = new Set(snap.docs.map((d) => d.id));
-      if (known.current) {
-        const fresh = snap.docs.filter((d) => !known.current!.has(d.id));
-        if (fresh.length) {
-          playNotification();
-          if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
-            const t = fresh[0].data();
-            new Notification("Novo cliente na fila", { body: `${t.contactName}: ${t.lastMessagePreview}`, icon: "/icon.png" });
-          }
-        }
-      }
-      known.current = ids;
-    });
-  }, [staff?.active]);
-
-  // Nova mensagem do cliente nos MEUS atendimentos → som + notificação.
-  const lastSeen = useRef<Map<string, number> | null>(null);
-  useEffect(() => {
-    if (!staff?.uid || !staff.active) return;
-    lastSeen.current = null;
-    const q = query(collection(db(), "tickets"), where("assignedTo", "==", staff.uid));
-    return onSnapshot(q, (snap) => {
-      const map = new Map<string, number>();
-      let notify: { contactName: string; lastMessagePreview: string } | null = null;
-      for (const d of snap.docs) {
-        const t = d.data();
-        if (t.status !== "open") continue;
-        map.set(d.id, t.lastMessageAt);
-        const before = lastSeen.current?.get(d.id);
-        if (lastSeen.current && !t.lastMessageFromMe && (before === undefined ? false : t.lastMessageAt > before))
-          notify = { contactName: t.contactName, lastMessagePreview: t.lastMessagePreview };
-      }
-      if (notify) {
-        playNotification();
-        if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden)
-          new Notification(notify.contactName, { body: notify.lastMessagePreview, icon: "/icon.png" });
-      }
-      lastSeen.current = map;
-    });
-  }, [staff?.uid, staff?.active]);
 
   // Encerramento automático por ausência: o painel aberto dispara a verificação a cada minuto.
   useEffect(() => {
@@ -103,6 +55,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-dvh flex-col md:flex-row">
+      <Notifier staff={staff} onWaitingCount={setWaiting} />
       <aside className="hidden w-[84px] shrink-0 flex-col items-center border-r border-slate-200/70 bg-white py-4 md:flex">
         <Link href="/atendimentos" className="mb-6 px-2">
           <Logo variant="icon" className="h-11" />
