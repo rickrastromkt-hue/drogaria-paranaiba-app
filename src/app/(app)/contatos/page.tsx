@@ -10,6 +10,7 @@ import { formatCpf, onlyDigits } from "@/lib/br";
 import type { Contact } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { ContactForm } from "@/components/ContactForm";
+import { Credit } from "@/components/Credit";
 
 type Filter = "saved" | "all";
 
@@ -53,7 +54,7 @@ export default function ContatosPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl p-4 sm:p-6">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col p-4 sm:p-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">Contatos</h1>
@@ -134,6 +135,7 @@ export default function ContatosPage() {
             </table>
           )}
         </div>
+        <Credit className="mt-auto pt-10 text-center" />
       </div>
 
       {editing && (

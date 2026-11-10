@@ -7,6 +7,7 @@ import { useTeam } from "@/lib/hooks";
 import type { Role, StaffUser } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
 import { Avatar } from "@/components/Avatar";
+import { Credit } from "@/components/Credit";
 
 export default function EquipePage() {
   const { staff } = useAuth();
@@ -50,7 +51,7 @@ export default function EquipePage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col p-4 sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">Equipe</h1>
@@ -131,6 +132,7 @@ export default function EquipePage() {
             </div>
           ))}
         </div>
+        <Credit className="mt-auto pt-10 text-center" />
       </div>
     </div>
   );

@@ -17,3 +17,4 @@ function app(): App {
 
 export const adminAuth = () => getAuth(app());
 export const adminDb = () => getFirestore(app());
+export const adminApp = () => app();

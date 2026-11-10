@@ -1,6 +1,6 @@
 import "server-only";
 import { FieldValue, type DocumentReference, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
-import { adminDb } from "./firebase-admin";
+import { adminApp, adminDb } from "./firebase-admin";
 import { HttpError } from "./api";
 import { parseContent, previewOf, zapi, type ZapiReceived, type ZapiStatus } from "./zapi";
 import { normalizePhone } from "./br";
@@ -668,4 +668,48 @@ export async function sweepInactive(): Promise<number> {
     if (ok) closed++;
   }
   return closed;
+}
+
+/* ------------------------------------------------------------------ */
+/* Exclusão (admin)                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Apaga atendimentos, suas mensagens e arquivos enviados. Não pode ser desfeito. */
+export async function deleteTickets(ids: string[]): Promise<number> {
+  let deleted = 0;
+  for (const id of ids) {
+    const ref = ticketRef(id);
+    const snap = await ref.get();
+    if (!snap.exists) continue;
+    const t = snap.data() as Ticket;
+
+    // Desvincula do contato, se for o atendimento ativo/último.
+    const contactRef = db().doc(`contacts/${safeId(t.phone)}`);
+    await db()
+      .runTransaction(async (tx) => {
+        const c = (await tx.get(contactRef)).data();
+        if (!c) return;
+        const upd: Record<string, null> = {};
+        if (c.activeTicketId === id) upd.activeTicketId = null;
+        if (c.lastTicketId === id) upd.lastTicketId = null;
+        if (Object.keys(upd).length) tx.update(contactRef, upd);
+      })
+      .catch((e) => console.error("delete/contact", id, e));
+
+    await db().recursiveDelete(ref); // ticket + subcoleção de mensagens
+    await deleteUploads(id);
+    deleted++;
+  }
+  return deleted;
+}
+
+async function deleteUploads(ticketId: string) {
+  const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+  if (!bucket) return;
+  try {
+    const { getStorage } = await import("firebase-admin/storage");
+    await getStorage(adminApp()).bucket(bucket).deleteFiles({ prefix: `uploads/${ticketId}/` });
+  } catch (e) {
+    console.error("delete/uploads", ticketId, e);
+  }
 }

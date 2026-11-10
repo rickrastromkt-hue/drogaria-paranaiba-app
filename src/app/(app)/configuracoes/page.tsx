@@ -9,6 +9,7 @@ import { formatPhoneInput, onlyDigits } from "@/lib/br";
 import { useQuickReplies, useSettings } from "@/lib/hooks";
 import type { Settings } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
+import { Credit } from "@/components/Credit";
 
 type ZStatus = { connected: boolean; smartphoneConnected?: boolean; error?: string; qr?: string | null };
 
@@ -306,7 +307,7 @@ export default function ConfiguracoesPage() {
   if (staff?.role !== "admin") return <p className="p-6 text-sm text-slate-500">Apenas administradores.</p>;
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col space-y-5 p-4 sm:p-6">
         <div>
           <h1 className="text-xl font-semibold">Ajustes</h1>
           <p className="text-sm text-slate-500">Conexão, mensagens automáticas e respostas rápidas</p>
@@ -314,6 +315,7 @@ export default function ConfiguracoesPage() {
         <ConnectionCard />
         <MessagesForm />
         <QuickRepliesCard />
+        <Credit className="mt-auto pt-10 text-center" />
       </div>
     </div>
   );

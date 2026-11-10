@@ -187,6 +187,7 @@ export default function AtendimentosPage() {
             </ul>
           )}
         </div>
+        <Credit className="border-t border-slate-100 py-2.5 text-center" />
       </section>
 
       {newConv && (
@@ -221,7 +222,6 @@ export default function AtendimentosPage() {
             </div>
             <p className="font-medium text-slate-600">Olá, {staff?.name?.split(" ")[0]}!</p>
             <p className="max-w-xs text-sm">Selecione um atendimento ao lado ou pegue o próximo cliente da fila.</p>
-            <Credit className="absolute bottom-4" />
           </div>
         )}
       </section>

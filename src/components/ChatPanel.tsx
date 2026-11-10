@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
-import { ArrowLeft, ArrowRightLeft, BadgeCheck, CheckCircle2, Hand, Loader2, Paperclip, SendHorizontal, Timer, UserRound, X } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, BadgeCheck, CheckCircle2, Hand, Loader2, Paperclip, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
 import { db, storage } from "@/lib/firebase";
 import { api, duration, formatPhone, useNow } from "@/lib/client";
 import type { Contact, Message, QuickReply, StaffUser, Ticket } from "@/lib/types";
@@ -19,6 +19,9 @@ type Props = {
   autoCloseMinutes?: number;
   readOnly?: boolean;
   onBack?: () => void;
+  onDeleted?: () => void;
+  /** Mostra um X no cabeçalho (usado na gaveta do Histórico). */
+  onClose?: () => void;
 };
 
 function dayLabel(ts: number) {
@@ -31,7 +34,7 @@ function dayLabel(ts: number) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long" });
 }
 
-export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinutes = 10, readOnly, onBack }: Props) {
+export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinutes = 10, readOnly, onBack, onDeleted, onClose }: Props) {
   const { staff } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
@@ -145,6 +148,14 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     });
   }
 
+  const remove = () => {
+    if (!confirm(`Excluir o atendimento ${ticket.protocol} de ${ticket.contactName}?\n\nTodas as mensagens e arquivos serão apagados e isso NÃO pode ser desfeito.`)) return;
+    run("delete", async () => {
+      await api("/api/tickets/delete", { ids: [ticket.id] });
+      onDeleted?.();
+    });
+  };
+
   let lastDay = "";
 
   return (
@@ -187,6 +198,12 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
           </div>
         )}
 
+        {staff?.role === "admin" && (
+          <button onClick={remove} disabled={!!busy} className="btn btn-ghost px-2.5 hover:bg-accent-50 hover:text-accent-600" title="Excluir atendimento">
+            {busy === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        )}
+
         <button
           onClick={() => setShowContact((v) => !v)}
           className={`btn px-2.5 ${showContact ? "bg-brand-50 text-brand-700" : "btn-ghost"}`}
@@ -223,6 +240,11 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
               </button>
             )}
           </div>
+        )}
+        {onClose && (
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" title="Fechar">
+            <X className="h-5 w-5" />
+          </button>
         )}
       </header>
 
