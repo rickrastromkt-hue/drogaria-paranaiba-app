@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase";
 import { api, playNotification } from "@/lib/client";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
+import { Credit } from "@/components/Credit";
 import { Avatar } from "@/components/Avatar";
 
 const NAV = [

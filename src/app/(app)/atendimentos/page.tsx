@@ -10,6 +10,7 @@ import type { Ticket } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
 import { Avatar } from "@/components/Avatar";
 import { ChatPanel } from "@/components/ChatPanel";
+import { Credit } from "@/components/Credit";
 import { NewConversation } from "@/components/NewConversation";
 
 type Tab = "mine" | "queue" | "team";
@@ -214,12 +215,13 @@ export default function AtendimentosPage() {
             onBack={() => setSelectedId(null)}
           />
         ) : (
-          <div className="chat-bg flex h-full flex-col items-center justify-center gap-3 text-center text-slate-400">
+          <div className="chat-bg relative flex h-full flex-col items-center justify-center gap-3 text-center text-slate-400">
             <div className="rounded-full bg-white p-5 shadow-sm">
               <MessageCircleHeart className="h-10 w-10 text-accent-500" />
             </div>
             <p className="font-medium text-slate-600">Olá, {staff?.name?.split(" ")[0]}!</p>
             <p className="max-w-xs text-sm">Selecione um atendimento ao lado ou pegue o próximo cliente da fila.</p>
+            <Credit className="absolute bottom-4" />
           </div>
         )}
       </section>

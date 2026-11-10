@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
+import { Credit } from "@/components/Credit";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -58,7 +59,7 @@ export default function LoginPage() {
   const blocked = !loading && user && (!staff || !staff.active);
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-brand-50 via-white to-accent-50 p-4">
+    <main className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-brand-50 via-white to-accent-50 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <Logo className="h-24" />
@@ -101,6 +102,7 @@ export default function LoginPage() {
           </p>
         )}
       </div>
+      <Credit className="absolute inset-x-0 bottom-4 text-center" />
     </main>
   );
 }
