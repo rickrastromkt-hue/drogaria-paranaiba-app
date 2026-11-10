@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isStaff() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && me().active == true;
+    }
+    function isAdmin() { return isStaff() && me().role == 'admin'; }
+
+    // Escritas sensíveis (pegar, responder, encerrar, equipe) passam pelas rotas /api com Admin SDK.
+    match /users/{uid} {
+      allow read: if isStaff() || request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /tickets/{ticketId} {
+      allow read: if isStaff();
+      // O painel só pode zerar o contador de não lidas.
+      allow update: if isStaff()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unread']);
+
+      match /messages/{messageId} {
+        allow read: if isStaff();
+      }
+    }
+
+    match /contacts/{phone} {
+      allow read: if isStaff();
+    }
+
+    match /settings/{doc} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    match /quickReplies/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

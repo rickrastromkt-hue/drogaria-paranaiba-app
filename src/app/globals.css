@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* Cor da marca: ajuste aqui para combinar com o logo */
+@theme {
+  --color-brand-50: #ecfdf6;
+  --color-brand-100: #d1fae8;
+  --color-brand-200: #a7f3d4;
+  --color-brand-300: #6ee7b9;
+  --color-brand-400: #34d39b;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-brand-600 text-white shadow-sm hover:bg-brand-700;
+  }
+  .btn-soft {
+    @apply bg-brand-50 text-brand-700 hover:bg-brand-100;
+  }
+  .btn-ghost {
+    @apply text-slate-600 hover:bg-slate-100;
+  }
+  .btn-danger {
+    @apply bg-rose-50 text-rose-600 hover:bg-rose-100;
+  }
+  .input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-slate-500;
+  }
+  .card {
+    @apply rounded-2xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)];
+  }
+}
+
+.chat-bg {
+  background-color: #f6f8f7;
+  background-image: radial-gradient(rgba(16, 185, 129, 0.07) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d9dee5;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
