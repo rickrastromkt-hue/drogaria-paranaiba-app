@@ -2,6 +2,7 @@
 
 import { Bot, Check, CheckCheck, Clock, MapPin, Smartphone, User, X } from "lucide-react";
 import { AudioPlayer, DocumentMessage, ImageMessage } from "./Media";
+import { WhatsappText } from "./WhatsappText";
 import type { Message } from "@/lib/types";
 import { formatTime } from "@/lib/client";
 
@@ -71,7 +72,7 @@ export function MessageBubble({ m }: { m: Message }) {
       >
         {tag && <div className="mb-0.5 text-[11px] font-medium text-slate-500">{tag}</div>}
         <Media m={m} mine={mine} />
-        {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
+        {m.text && <WhatsappText text={m.text} />}
         <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
           {formatTime(m.createdAt)}
           {mine && <StatusIcon status={m.status} />}
