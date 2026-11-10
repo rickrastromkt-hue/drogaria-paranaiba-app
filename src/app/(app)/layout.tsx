@@ -13,7 +13,7 @@ import { Credit } from "@/components/Credit";
 import { Avatar } from "@/components/Avatar";
 
 const NAV = [
-  { href: "/atendimentos", label: "Atendimentos", icon: MessageCircle },
+  { href: "/atendimentos", label: "Conversas", icon: MessageCircle },
   { href: "/contatos", label: "Contatos", icon: BookUser },
   { href: "/historico", label: "Histórico", icon: History },
   { href: "/equipe", label: "Equipe", icon: Users, admin: true },
