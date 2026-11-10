@@ -18,6 +18,14 @@ const db = () => adminDb();
 const ticketRef = (id: string) => db().doc(`tickets/${id}`);
 const safeId = (s: string) => String(s).replace(/\//g, "_");
 
+/** Data no fuso de Brasília no formato AAAAMMDD. */
+function todayKey(now = new Date()) {
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(now)
+    .reduce<Record<string, string>>((a, x) => ((a[x.type] = x.value), a), {});
+  return `${p.year}${p.month}${p.day}`;
+}
+
 export async function getSettings(): Promise<Settings> {
   const snap = await db().doc("settings/general").get();
   return { ...DEFAULT_SETTINGS, ...(snap.data() as Partial<Settings> | undefined) };
@@ -159,13 +167,17 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
     }
 
     let isNew = false;
-    let protocol = 0;
+    let protocol = "";
     if (!ref) {
       const counter = await tx.get(counterRef);
-      protocol = ((counter.data()?.ticket as number) || 0) + 1;
+      // Protocolo = AAAAMMDD-NNN, sequência reinicia a cada dia.
+      const day = todayKey();
+      const c = counter.data();
+      const seq = c?.day === day ? ((c?.daySeq as number) || 0) + 1 : 1;
+      protocol = `${day}-${String(seq).padStart(3, "0")}`;
       ref = db().collection("tickets").doc();
       isNew = true;
-      tx.set(counterRef, { ticket: protocol }, { merge: true });
+      tx.set(counterRef, { day, daySeq: seq }, { merge: true });
     }
 
     tx.set(

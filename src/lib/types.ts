@@ -14,7 +14,8 @@ export type ClosedBy = "agent" | "inactivity";
 
 export interface Ticket {
   id: string;
-  protocol: number;
+  /** Ex.: 20261110-001 (data + sequência do dia). Tickets antigos podem ter número. */
+  protocol: string | number;
   phone: string;
   contactName: string;
   contactPhoto: string | null;

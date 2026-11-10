@@ -33,7 +33,7 @@ export default function HistoricoPage() {
               t.contactName.toLowerCase().includes(term) ||
               (t.assignedName || "").toLowerCase().includes(term) ||
               t.phone.includes(term.replace(/\D/g, "") || "§") ||
-              String(t.protocol) === term
+              String(t.protocol).replace(/\D/g, "").includes(term.replace(/\D/g, "") || "§")
           )
         : tickets,
     [tickets, term]
