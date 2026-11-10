@@ -4,6 +4,7 @@ import { adminApp, adminDb } from "./firebase-admin";
 import { HttpError } from "./api";
 import { parseContent, previewOf, zapi, type ZapiReceived, type ZapiStatus } from "./zapi";
 import { normalizePhone } from "./br";
+import { mergeBranding, type Branding } from "./branding";
 import {
   DEFAULT_SETTINGS,
   renderTemplate,
@@ -26,6 +27,12 @@ function todayKey(now = new Date()) {
     .formatToParts(now)
     .reduce<Record<string, string>>((a, x) => ((a[x.type] = x.value), a), {});
   return `${p.year}${p.month}${p.day}`;
+}
+
+/** Nome e slogan da empresa para as variáveis {empresa} e {slogan} das mensagens. */
+async function brandVars() {
+  const b = mergeBranding((await db().doc("settings/branding").get()).data() as Partial<Branding> | undefined);
+  return { empresa: b.companyName, slogan: b.slogan };
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -127,7 +134,7 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
   const contactRef = db().doc(`contacts/${phone}`);
   const counterRef = db().doc("meta/counters");
 
-  // Mensagem enviada direto do celular da farmácia: só registra no atendimento ativo.
+  // Mensagem enviada direto do celular da empresa: só registra no atendimento ativo.
   if (p.fromMe) {
     const contact = (await contactRef.get()).data();
     if (!contact?.activeTicketId) return null;
@@ -305,7 +312,7 @@ function nextProtocol(tx: Transaction, counter: DocumentSnapshot): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Iniciar conversa (pela farmácia)                                    */
+/* Iniciar conversa (pela empresa)                                     */
 /* ------------------------------------------------------------------ */
 
 /** Variações do número com/sem o 9º dígito (o WhatsApp às vezes usa o formato antigo). */
@@ -441,7 +448,7 @@ async function sendLoose(phone: string, text: string) {
 async function sendMenu(phone: string, s: Settings, name?: string) {
   const o1 = s.menuOption1Label || "Atendimento";
   const o2 = s.menuOption2Label || "Financeiro";
-  const msg = renderTemplate(s.menuButtonsMessage || s.menuMessage, { nome: name });
+  const msg = renderTemplate(s.menuButtonsMessage || s.menuMessage, { ...(await brandVars()), nome: name });
   try {
     if (s.menuStyle === "buttons")
       return void (await zapi.sendButtons(phone, msg, [
@@ -456,7 +463,7 @@ async function sendMenu(phone: string, s: Settings, name?: string) {
   } catch (e) {
     console.error("Botões/lista falharam, enviando menu em texto", e);
   }
-  await sendLoose(phone, renderTemplate(s.menuMessage, { nome: name }));
+  await sendLoose(phone, renderTemplate(s.menuMessage, { ...(await brandVars()), nome: name }));
 }
 
 /** Ações automáticas depois de registrar a mensagem recebida. */
@@ -467,13 +474,13 @@ export async function afterReceived(phone: string, r: ReceivedResult | null) {
   const s = await getSettings();
   if (r.action === "menu") return sendMenu(phone, s, r.name);
   if (r.action === "invalid") {
-    if (s.menuStyle === "text") return sendLoose(phone, renderTemplate(s.menuInvalidMessage, { nome: r.name }));
+    if (s.menuStyle === "text") return sendLoose(phone, renderTemplate(s.menuInvalidMessage, { ...(await brandVars()), nome: r.name }));
     return sendMenu(phone, { ...s, menuButtonsMessage: "Por favor, toque em uma das opções abaixo 👇" }, r.name);
   }
   if (r.action === "finance") {
     const fin = normalizePhone(s.financeWhatsapp || "");
     const link = fin ? `https://wa.me/${fin}` : "";
-    const finText = renderTemplate(s.financeMessage, { nome: r.name, financeiro: link });
+    const finText = renderTemplate(s.financeMessage, { ...(await brandVars()), nome: r.name, financeiro: link });
     if (r.ticketId) {
       await addSystemNote(ticketRef(r.ticketId), "Direcionado ao Financeiro — atendimento encerrado");
       await sendOutbound({ id: r.ticketId, phone }, { type: "text", text: finText }, { source: "bot", startTimer: false });
@@ -481,7 +488,7 @@ export async function afterReceived(phone: string, r: ReceivedResult | null) {
     if (s.financeNotify && fin && fin !== phone) {
       await sendLoose(
         fin,
-        renderTemplate(s.financeNotifyMessage, {
+        renderTemplate(s.financeNotifyMessage, { ...(await brandVars()),
           nome: r.name,
           nomeCompleto: true,
           telefone: `https://wa.me/${phone}`,
@@ -498,7 +505,7 @@ export async function sendWelcome(ticketId: string) {
   if (!settings.welcomeMessage.trim()) return;
   const t = (await ticketRef(ticketId).get()).data() as Ticket | undefined;
   if (!t) return;
-  const text = renderTemplate(settings.welcomeMessage, { nome: t.contactName, protocolo: t.protocol });
+  const text = renderTemplate(settings.welcomeMessage, { ...(await brandVars()), nome: t.contactName, protocolo: t.protocol });
   await sendOutbound({ id: ticketId, phone: t.phone }, { type: "text", text }, { source: "bot", startTimer: false });
 }
 
@@ -553,7 +560,7 @@ export async function assignTicket(id: string, agent: StaffUser) {
   await addSystemNote(ref, `${agent.name} assumiu o atendimento`);
   const settings = await getSettings();
   if (settings.assignedMessage.trim()) {
-    const text = renderTemplate(settings.assignedMessage, {
+    const text = renderTemplate(settings.assignedMessage, { ...(await brandVars()),
       nome: ticket.contactName,
       atendente: agent.name,
       protocolo: ticket.protocol,
@@ -639,7 +646,7 @@ export async function closeTicket(
   const settings = await getSettings();
   const tpl = by === "inactivity" ? settings.inactivityMessage : settings.closedMessage;
   if (tpl.trim()) {
-    const text = renderTemplate(tpl, { nome: t.contactName, atendente: user?.name, protocolo: t.protocol });
+    const text = renderTemplate(tpl, { ...(await brandVars()), nome: t.contactName, atendente: user?.name, protocolo: t.protocol });
     await sendOutbound(t, { type: "text", text }, { source: "bot", startTimer: false }).catch((e) =>
       console.error("Falha ao enviar mensagem de encerramento", e)
     );

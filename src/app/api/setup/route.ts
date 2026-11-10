@@ -14,12 +14,14 @@ export const GET = handler(async () => ({ needed: !(await hasUsers()) }));
 /** Cria o primeiro administrador. Só funciona enquanto não houver nenhum usuário. */
 export const POST = handler(async (req: Request) => {
   if (await hasUsers()) throw new HttpError(403, "O sistema já foi configurado");
-  const b = await readJson<{ name?: string; email?: string; password?: string }>(req);
+  const b = await readJson<{ company?: string; name?: string; email?: string; password?: string }>(req);
   const name = (b.name || "").trim();
   const email = (b.email || "").trim().toLowerCase();
   if (!name || !email || !b.password || b.password.length < 6)
     throw new HttpError(400, "Preencha nome, e-mail e senha (mín. 6 caracteres)");
   const { uid } = await adminAuth().createUser({ email, password: b.password, displayName: name });
   await adminDb().doc(`users/${uid}`).set({ name, email, role: "admin", active: true, createdAt: Date.now() });
+  const company = (b.company || "").trim();
+  if (company) await adminDb().doc("settings/branding").set({ companyName: company }, { merge: true });
   return { ok: true };
 });

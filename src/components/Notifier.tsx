@@ -8,6 +8,7 @@ import { db } from "@/lib/firebase";
 import { playNotification } from "@/lib/client";
 import type { StaffUser, Ticket } from "@/lib/types";
 import { Avatar } from "./Avatar";
+import { useBranding } from "./BrandingProvider";
 
 type Toast = { key: number; ticketId: string; title: string; name: string; photo: string | null; body: string };
 
@@ -21,6 +22,9 @@ type Toast = { key: number; ticketId: string; title: string; name: string; photo
 export function Notifier({ staff, onWaitingCount }: { staff: StaffUser; onWaitingCount: (n: number) => void }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { branding } = useBranding();
+  const iconRef = useRef("/logo-default.svg");
+  iconRef.current = branding.icon || branding.logo || "/logo-default.svg";
   const onConversas = useRef(false);
   onConversas.current = pathname.startsWith("/atendimentos");
 
@@ -56,7 +60,7 @@ export function Notifier({ staff, onWaitingCount }: { staff: StaffUser; onWaitin
 
       if (!focused && typeof Notification !== "undefined" && Notification.permission === "granted") {
         try {
-          const n = new Notification(title, { body: `${t.contactName}: ${t.lastMessagePreview}`, icon: "/icon.png", tag: t.id });
+          const n = new Notification(title, { body: `${t.contactName}: ${t.lastMessagePreview}`, icon: iconRef.current, tag: t.id });
           n.onclick = () => {
             n.close();
             open(t.id);

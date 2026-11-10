@@ -1,4 +1,6 @@
-# Central de Atendimento WhatsApp — Farmácia
+# Central de Atendimento WhatsApp
+
+> Sistema *white-label*: uma instalação por empresa. Para instalar para um novo cliente, siga o **[INSTALACAO.md](INSTALACAO.md)**.
 
 Painel para a equipe atender clientes no WhatsApp via **Z-API**, com **Next.js** na **Vercel** e **Firebase** (Auth, Firestore e Storage).
 
@@ -7,7 +9,7 @@ Painel para a equipe atender clientes no WhatsApp via **Z-API**, com **Next.js**
 1. Cliente manda mensagem → a Z-API chama `/api/webhooks/zapi` → abre um **atendimento** (com protocolo) na **Fila** e envia a mensagem de boas-vindas.
 2. Um atendente clica em **Pegar atendimento** → ele vira o dono da conversa (os outros veem "com Fulano").
 3. O atendente responde (texto, imagem, áudio, vídeo, PDF; `/` abre as respostas rápidas), pode **transferir** ou **encerrar**.
-4. **Encerramento automático:** se a farmácia mandou a última mensagem e o cliente não responde em **10 min** (configurável), o atendimento fecha sozinho e o cliente recebe a mensagem de ausência. O cabeçalho do chat mostra a contagem regressiva.
+4. **Encerramento automático:** se a empresa mandou a última mensagem e o cliente não responde em **10 min** (configurável), o atendimento fecha sozinho e o cliente recebe a mensagem de ausência. O cabeçalho do chat mostra a contagem regressiva.
 5. Se o cliente escrever de novo depois de encerrado, abre um atendimento novo.
 
 Perfis: **Administrador** (equipe, ajustes, conexão) e **Atendente**.
@@ -80,6 +82,8 @@ cp .env.example .env.local   # preencha
 npm run dev
 ```
 
-## Logo e cores
-- `public/logo.png` = logo completo (login) · `public/icon.png` = coração (barra lateral e favicon).
-- Cores em `src/app/globals.css`: `brand` = azul do logo (botões), `accent` = vermelho do logo (fila e destaques).
+## Logo, nome e cores
+Tudo em **Ajustes → Empresa** (fica salvo em `settings/branding` no Firestore de cada empresa):
+- nome e slogan (usados no sistema e nas mensagens com `{empresa}` e `{slogan}`);
+- logo completo (login) e ícone quadrado (barra lateral, aba do navegador, notificações);
+- cor principal e cor de destaque (a paleta inteira é gerada a partir delas).

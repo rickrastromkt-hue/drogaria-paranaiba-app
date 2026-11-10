@@ -9,10 +9,12 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
 import { Credit } from "@/components/Credit";
+import { useBranding } from "@/components/BrandingProvider";
 
 export default function LoginPage() {
   const router = useRouter();
   const { staff, user, loading } = useAuth();
+  const { branding } = useBranding();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,7 +67,7 @@ export default function LoginPage() {
           <Logo className="h-24" />
           <div>
             <h1 className="text-xl font-semibold text-slate-800">Central de Atendimento</h1>
-            <p className="text-sm text-slate-500">Entre para atender os clientes no WhatsApp</p>
+            <p className="text-sm text-slate-500">{branding.slogan || `${branding.companyName} · atendimento no WhatsApp`}</p>
           </div>
         </div>
 

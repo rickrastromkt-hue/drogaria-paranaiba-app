@@ -11,7 +11,7 @@ import { Credit } from "@/components/Credit";
 export default function SetupPage() {
   const router = useRouter();
   const [needed, setNeeded] = useState<boolean | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ company: "", name: "", email: "", password: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -66,9 +66,13 @@ export default function SetupPage() {
           </div>
         ) : (
           <form onSubmit={submit} className="card space-y-4 p-6">
-            <p className="text-sm text-slate-500">Crie a conta do administrador. Depois ele cadastra a equipe.</p>
+            <p className="text-sm text-slate-500">Crie a conta do administrador. Depois, em Ajustes, você envia o logo, escolhe as cores e cadastra a equipe.</p>
             <div>
-              <label className="label">Nome</label>
+              <label className="label">Nome da empresa</label>
+              <input className="input" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} required />
+            </div>
+            <div>
+              <label className="label">Seu nome</label>
               <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>

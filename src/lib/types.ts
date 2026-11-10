@@ -30,7 +30,7 @@ export interface Ticket {
   lastMessageAt: number;
   lastMessagePreview: string;
   lastMessageFromMe: boolean;
-  /** Momento da última mensagem da farmácia sem resposta do cliente (base do auto-encerramento). */
+  /** Momento da última mensagem da empresa sem resposta do cliente (base do auto-encerramento). */
   awaitingCustomerSince: number | null;
   unread: number;
 }
@@ -120,21 +120,21 @@ export interface QuickReply {
 
 export const DEFAULT_SETTINGS: Settings = {
   welcomeMessage:
-    "Perfeito, {nome}! 😊 Seu protocolo é *{protocolo}*.\nEm instantes um de nossos atendentes vai falar com você. 💊",
+    "Perfeito, {nome}! 😊 Seu protocolo é *{protocolo}*.\nEm instantes um de nossos atendentes vai falar com você.",
   assignedMessage: "Oi, {nome}! Aqui é {atendente}, vou continuar seu atendimento. Como posso ajudar?",
   closedMessage:
-    "Atendimento *{protocolo}* finalizado. Obrigado pelo contato, {nome}! Nossa tradição é cuidar de você! ❤️",
+    "Atendimento *{protocolo}* finalizado. Obrigado pelo contato, {nome}! {slogan}",
   inactivityMessage:
     "Como não tivemos retorno, o atendimento *{protocolo}* foi encerrado. Se precisar, é só mandar uma nova mensagem. ❤️",
   autoCloseMinutes: 10,
   signMessages: true,
   menuEnabled: true,
   menuMessage:
-    "Olá, {nome}! 👋 Bem-vindo(a) à *Drogaria Paranaíba*.\nSobre qual assunto você quer falar?\n\n*1* - Atendimento (pedidos, preços e medicamentos)\n*2* - Financeiro (boletos, pagamentos e crediário)\n\nResponda com o *número* da opção.",
+    "Olá, {nome}! 👋 Bem-vindo(a) à *{empresa}*.\nSobre qual assunto você quer falar?\n\n*1* - Atendimento\n*2* - Financeiro (boletos e pagamentos)\n\nResponda com o *número* da opção.",
   menuInvalidMessage: "Não entendi 😅 Responda apenas com *1* para Atendimento ou *2* para Financeiro.",
   menuStyle: "text",
   menuButtonsMessage:
-    "Olá, {nome}! 👋 Bem-vindo(a) à *Drogaria Paranaíba*.\nSobre qual assunto você quer falar? Toque em uma opção abaixo:",
+    "Olá, {nome}! 👋 Bem-vindo(a) à *{empresa}*.\nSobre qual assunto você quer falar? Toque em uma opção abaixo:",
   menuOption1Label: "Atendimento",
   menuOption2Label: "Financeiro",
   financeWhatsapp: "",
@@ -155,10 +155,14 @@ export function renderTemplate(
     telefone?: string;
     mensagem?: string;
     nomeCompleto?: boolean;
+    empresa?: string;
+    slogan?: string;
   }
 ): string {
   const firstName = vars.nomeCompleto ? (vars.nome || "").trim() : (vars.nome || "").trim().split(/\s+/)[0] || "";
   return tpl
+    .replace(/\{empresa\}/g, vars.empresa || "")
+    .replace(/\{slogan\}/g, vars.slogan || "")
     .replace(/\{financeiro\}/g, vars.financeiro || "")
     .replace(/\{telefone\}/g, vars.telefone || "")
     .replace(/\{nome\}/g, firstName)

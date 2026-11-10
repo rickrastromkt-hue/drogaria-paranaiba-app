@@ -9,6 +9,7 @@ import { formatPhoneInput, onlyDigits } from "@/lib/br";
 import { useQuickReplies, useSettings } from "@/lib/hooks";
 import type { Settings } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
+import { BrandingForm } from "@/components/BrandingForm";
 import { Credit } from "@/components/Credit";
 
 type ZStatus = { connected: boolean; smartphoneConnected?: boolean; error?: string; qr?: string | null };
@@ -56,7 +57,7 @@ function ConnectionCard() {
   }
 
   return (
-    <Section title="WhatsApp (Z-API)" desc="Status da conexão do número da farmácia.">
+    <Section title="WhatsApp (Z-API)" desc="Status da conexão do número da empresa.">
       <div className="flex flex-wrap items-center gap-3">
         {loading ? (
           <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
@@ -128,7 +129,7 @@ function MessagesForm() {
   );
 
   return (
-    <Section title="Mensagens automáticas" desc="Variáveis disponíveis: {nome}, {atendente}, {protocolo}. Use *texto* para negrito.">
+    <Section title="Mensagens automáticas" desc="Variáveis disponíveis: {nome}, {atendente}, {protocolo}, {empresa}, {slogan}. Use *texto* para negrito.">
       <form onSubmit={save} className="space-y-4">
         <div className="space-y-4 rounded-2xl border border-brand-100 bg-brand-50/40 p-4">
           <label className="flex cursor-pointer items-start gap-3">
@@ -230,7 +231,7 @@ function MessagesForm() {
               value={form.autoCloseMinutes}
               onChange={(e) => setForm({ ...form, autoCloseMinutes: Number(e.target.value) })}
             />
-            <p className="mt-1 text-xs text-slate-400">Conta a partir da última mensagem da farmácia sem resposta.</p>
+            <p className="mt-1 text-xs text-slate-400">Conta a partir da última mensagem da empresa sem resposta.</p>
           </div>
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
             <input
@@ -310,8 +311,11 @@ export default function ConfiguracoesPage() {
       <div className="mx-auto flex min-h-full max-w-5xl flex-col space-y-5 p-4 sm:p-6">
         <div>
           <h1 className="text-xl font-semibold">Ajustes</h1>
-          <p className="text-sm text-slate-500">Conexão, mensagens automáticas e respostas rápidas</p>
+          <p className="text-sm text-slate-500">Empresa, conexão, mensagens automáticas e respostas rápidas</p>
         </div>
+        <Section title="Empresa" desc="Nome, logo e cores do sistema. As mudanças aparecem na hora para você conferir antes de salvar.">
+          <BrandingForm />
+        </Section>
         <ConnectionCard />
         <MessagesForm />
         <QuickRepliesCard />

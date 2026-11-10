@@ -8,6 +8,7 @@ import { BookUser, History, Loader2, LogOut, MessageCircle, Settings, Users } fr
 import { db } from "@/lib/firebase";
 import { api } from "@/lib/client";
 import { Notifier } from "@/components/Notifier";
+import { useBranding } from "@/components/BrandingProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
 import { Credit } from "@/components/Credit";
@@ -26,6 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [waiting, setWaiting] = useState(0);
+  const { branding } = useBranding();
 
   useEffect(() => {
     if (!loading && (!user || !staff?.active)) router.replace("/login");
@@ -41,8 +43,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [staff?.active]);
 
   useEffect(() => {
-    document.title = waiting ? `(${waiting}) Atendimento · Drogaria Paranaíba` : "Atendimento · Drogaria Paranaíba";
-  }, [waiting]);
+    const base = `Atendimento · ${branding.companyName}`;
+    document.title = waiting ? `(${waiting}) ${base}` : base;
+  }, [waiting, branding.companyName]);
 
   if (loading || !staff?.active)
     return (

@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
-/* Cores da marca (logo Drogaria Paranaíba): azul = principal, vermelho = destaque */
+/* Cores padrão. Cada empresa define as suas em Ajustes → Empresa (aplicadas em tempo real). */
 @theme {
-  --color-brand-50: #eef0ff;
-  --color-brand-100: #e0e3ff;
-  --color-brand-200: #c6caff;
-  --color-brand-300: #a3a6ff;
-  --color-brand-400: #7a78fb;
-  --color-brand-500: #4f45f0;
-  --color-brand-600: #2a1fd6;
-  --color-brand-700: #1a0fb8;
-  --color-brand-800: #170f93;
-  --color-brand-900: #171374;
-  --color-accent-50: #fff1f3;
-  --color-accent-100: #ffe0e5;
-  --color-accent-200: #ffc6cf;
-  --color-accent-500: #db2341;
-  --color-accent-600: #c01a37;
-  --color-accent-700: #a1152f;
+  --color-brand-50: #f2f6fe;
+  --color-brand-100: #e5ecfd;
+  --color-brand-200: #c9d8fa;
+  --color-brand-300: #9fbaf6;
+  --color-brand-400: #6f98f2;
+  --color-brand-500: #4479ee;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1f54c8;
+  --color-brand-800: #1a45a5;
+  --color-brand-900: #143681;
+  --color-accent-50: #fdf1f4;
+  --color-accent-100: #fbe2e7;
+  --color-accent-200: #f7c4cf;
+  --color-accent-500: #e11d48;
+  --color-accent-600: #c61a3f;
+  --color-accent-700: #a71535;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 

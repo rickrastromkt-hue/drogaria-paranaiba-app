@@ -9,6 +9,7 @@ import { formatPhoneInput, normalizePhone, onlyDigits } from "@/lib/br";
 import type { Contact } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
+import { useBranding } from "./BrandingProvider";
 
 type Props = {
   initialPhone?: string;
@@ -20,6 +21,7 @@ type Target = { phone: string; name: string; photo?: string | null; saved?: bool
 
 export function NewConversation({ initialPhone, onClose, onStarted }: Props) {
   const { staff } = useAuth();
+  const { branding } = useBranding();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<Target | null>(null);
@@ -47,7 +49,7 @@ export function NewConversation({ initialPhone, onClose, onStarted }: Props) {
     setTarget(t);
     setError("");
     const first = (t.name || "").trim().split(/\s+/)[0];
-    setText(`Olá${first && !/^\d+$/.test(first) ? `, ${first}` : ""}! Aqui é ${staff?.name?.split(" ")[0] || ""}, da Drogaria Paranaíba. `);
+    setText(`Olá${first && !/^\d+$/.test(first) ? `, ${first}` : ""}! Aqui é ${staff?.name?.split(" ")[0] || ""}, da ${branding.companyName}. `);
     setTimeout(() => {
       textRef.current?.focus();
       const l = textRef.current?.value.length || 0;
