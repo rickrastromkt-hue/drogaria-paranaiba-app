@@ -3,6 +3,7 @@ import { FieldValue, type DocumentReference } from "firebase-admin/firestore";
 import { adminDb } from "./firebase-admin";
 import { HttpError } from "./api";
 import { parseContent, previewOf, zapi, type ZapiReceived, type ZapiStatus } from "./zapi";
+import { normalizePhone } from "./br";
 import {
   DEFAULT_SETTINGS,
   renderTemplate,
@@ -111,7 +112,7 @@ function addSystemNote(ref: DocumentReference, text: string) {
 /* Webhook: mensagem recebida                                          */
 /* ------------------------------------------------------------------ */
 
-export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: string; isNew?: boolean } | null> {
+export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | null> {
   if (p.isGroup || p.isNewsletter || p.broadcast || p.isStatusReply) return null;
   if (!p.phone || !p.messageId) return null;
   if (p.fromMe && p.fromApi) return null; // já registrado por nós ao enviar
@@ -144,17 +145,19 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
       lastMessageFromMe: true,
       ...(t.status === "open" ? { awaitingCustomerSince: now } : {}),
     });
-    return { ticketId: ref.id, isNew: false };
+    return { action: "none", ticketId: ref.id };
   }
 
   const waName = p.senderName || p.chatName || p.phone;
   const photo = p.senderPhoto || p.photo || null;
+  const settings = await getSettings();
 
-  return db().runTransaction(async (tx) => {
+  return db().runTransaction(async (tx): Promise<ReceivedResult> => {
     const contactSnap = await tx.get(contactRef);
     const contact = contactSnap.data();
     // Nome salvo pela equipe tem prioridade sobre o nome do WhatsApp.
     const name: string = contact?.saved && contact?.name ? contact.name : waName;
+    const base = { phone: p.phone, name, waName, photo, lastMessageAt: now };
 
     let ref: DocumentReference | null = null;
     if (contact?.activeTicketId) {
@@ -165,9 +168,48 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
 
     if (ref) {
       const dup = await tx.get(ref.collection("messages").doc(msgId));
-      if (dup.exists) return { ticketId: ref.id, isNew: false };
+      if (dup.exists) return { action: "none", ticketId: ref.id };
     }
 
+    const incoming: PendingMessage = { id: msgId, ...content, createdAt: now };
+    let backlog: PendingMessage[] = [];
+
+    /* ---------- Menu inicial (só quando não há atendimento aberto) ---------- */
+    if (!ref && settings.menuEnabled) {
+      const menu = (contact?.menu || {}) as MenuState;
+      const pendingActive = !!menu.pendingSince && now - menu.pendingSince < MENU_TTL;
+      const pending = pendingActive ? menu.pending || [] : [];
+      if (pending.some((m) => m.id === msgId)) return { action: "none" };
+      const choice = parseChoice(content.text);
+
+      if (pendingActive || choice) {
+        if (choice === "finance") {
+          const first = [...pending, incoming].find((m) => m.text && !parseChoice(m.text));
+          tx.set(contactRef, { ...base, menu: { pendingSince: null, pending: [], financeAt: now } }, { merge: true });
+          return { action: "finance", name, firstText: first?.text || content.text };
+        }
+        if (choice === "service") {
+          backlog = pending; // mensagens enviadas antes da escolha entram no atendimento
+          tx.set(contactRef, { menu: { pendingSince: null, pending: [], financeAt: menu.financeAt ?? null } }, { merge: true });
+        } else {
+          tx.set(
+            contactRef,
+            { ...base, menu: { ...menu, pendingSince: menu.pendingSince || now, pending: [...pending, incoming].slice(-20) } },
+            { merge: true }
+          );
+          return { action: "invalid", name };
+        }
+      } else if (menu.financeAt && now - menu.financeAt < FINANCE_COOLDOWN) {
+        // Acabou de ser direcionado ao financeiro ("ok, obrigado"): não reenvia o menu.
+        tx.set(contactRef, base, { merge: true });
+        return { action: "none" };
+      } else {
+        tx.set(contactRef, { ...base, menu: { pendingSince: now, pending: [incoming], financeAt: null } }, { merge: true });
+        return { action: "menu", name };
+      }
+    }
+
+    /* ---------- Atendimento ---------- */
     let isNew = false;
     let protocol = "";
     if (!ref) {
@@ -182,15 +224,12 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
       tx.set(counterRef, { day, daySeq: seq }, { merge: true });
     }
 
-    tx.set(
-      contactRef,
-      { phone: p.phone, name, waName, photo, lastMessageAt: now, activeTicketId: ref.id, lastTicketId: ref.id },
-      { merge: true }
-    );
+    tx.set(contactRef, { ...base, activeTicketId: ref.id, lastTicketId: ref.id }, { merge: true });
 
     const preview = previewOf(content.type, content.text);
+    const all = [...backlog, incoming];
     if (isNew) {
-      const t: Omit<Ticket, "id"> = {
+      const tk: Omit<Ticket, "id"> = {
         protocol,
         phone: p.phone,
         contactName: name,
@@ -198,15 +237,15 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
         status: "waiting",
         assignedTo: null,
         assignedName: null,
-        createdAt: now,
+        createdAt: all[0].createdAt,
         assignedAt: null,
         lastMessageAt: now,
         lastMessagePreview: preview,
         lastMessageFromMe: false,
         awaitingCustomerSince: null,
-        unread: 1,
+        unread: all.length,
       };
-      tx.set(ref, t);
+      tx.set(ref, tk);
     } else {
       tx.update(ref, {
         contactName: name,
@@ -219,14 +258,73 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
       });
     }
 
-    tx.set(ref.collection("messages").doc(msgId), {
-      source: "customer",
-      ...content,
-      createdAt: now,
-    } satisfies Omit<Message, "id">);
+    for (const m of all) {
+      const { id, ...rest } = m;
+      tx.set(ref.collection("messages").doc(id), { source: "customer", ...rest } satisfies Omit<Message, "id">);
+    }
 
-    return { ticketId: ref.id, isNew };
+    return { action: isNew ? "welcome" : "none", ticketId: ref.id, isNew };
   });
+}
+
+/* ---------- Menu inicial: tipos e helpers ---------- */
+
+const MENU_TTL = 30 * 60_000; // menu sem resposta expira em 30 min
+const FINANCE_COOLDOWN = 15 * 60_000; // após direcionar ao financeiro, silêncio por 15 min
+
+type PendingMessage = ReturnType<typeof parseContent> & { id: string; createdAt: number };
+type MenuState = { pendingSince?: number | null; pending?: PendingMessage[]; financeAt?: number | null };
+
+export type ReceivedResult = {
+  action: "none" | "welcome" | "menu" | "invalid" | "finance";
+  ticketId?: string;
+  isNew?: boolean;
+  name?: string;
+  firstText?: string;
+};
+
+function parseChoice(text: string): "service" | "finance" | null {
+  const s = (text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[*_.)\-]/g, " ")
+    .trim();
+  if (/^((opcao|op)\s*)?1\b/.test(s) || /^atendimento\b/.test(s)) return "service";
+  if (/^((opcao|op)\s*)?2\b/.test(s) || /^financ/.test(s)) return "finance";
+  return null;
+}
+
+/** Envia direto pelo WhatsApp, sem registrar em atendimento (menu e financeiro). */
+async function sendLoose(phone: string, text: string) {
+  if (!text.trim()) return;
+  await zapi.sendText(phone, text);
+}
+
+/** Ações automáticas depois de registrar a mensagem recebida. */
+export async function afterReceived(phone: string, r: ReceivedResult | null) {
+  if (!r) return;
+  if (r.action === "welcome" && r.ticketId) return sendWelcome(r.ticketId);
+  if (r.action === "none") return;
+  const s = await getSettings();
+  if (r.action === "menu") return sendLoose(phone, renderTemplate(s.menuMessage, { nome: r.name }));
+  if (r.action === "invalid") return sendLoose(phone, renderTemplate(s.menuInvalidMessage, { nome: r.name }));
+  if (r.action === "finance") {
+    const fin = normalizePhone(s.financeWhatsapp || "");
+    const link = fin ? `https://wa.me/${fin}` : "";
+    await sendLoose(phone, renderTemplate(s.financeMessage, { nome: r.name, financeiro: link }));
+    if (s.financeNotify && fin && fin !== phone) {
+      await sendLoose(
+        fin,
+        renderTemplate(s.financeNotifyMessage, {
+          nome: r.name,
+          nomeCompleto: true,
+          telefone: `https://wa.me/${phone}`,
+          mensagem: r.firstText || "—",
+        })
+      ).catch((e) => console.error("Falha ao avisar o financeiro", e));
+    }
+  }
 }
 
 /** Envia a mensagem de boas-vindas de um ticket recém-criado. */

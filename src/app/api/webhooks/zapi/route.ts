@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { handleReceived, handleStatus, sendWelcome, sweepInactive } from "@/lib/tickets";
+import { afterReceived, handleReceived, handleStatus, sweepInactive } from "@/lib/tickets";
 import type { ZapiReceived, ZapiStatus } from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +24,9 @@ export async function POST(req: Request) {
 
   try {
     if (body.type === "ReceivedCallback") {
-      const r = await handleReceived(body as ZapiReceived);
-      if (r?.isNew && r.ticketId) {
-        const id = r.ticketId;
-        after(() => sendWelcome(id).catch((e) => console.error("welcome", e)));
-      }
+      const payload = body as ZapiReceived;
+      const r = await handleReceived(payload);
+      if (r && r.action !== "none") after(() => afterReceived(payload.phone, r).catch((e) => console.error("auto-resposta", e)));
     } else if (body.type === "MessageStatusCallback") {
       await handleStatus(body as ZapiStatus);
     }

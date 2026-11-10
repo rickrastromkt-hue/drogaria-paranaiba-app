@@ -5,6 +5,7 @@ import { addDoc, collection, deleteDoc, doc, setDoc } from "firebase/firestore";
 import { CheckCircle2, Link2, Loader2, Plus, RefreshCw, Save, Trash2, WifiOff, Zap } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { api } from "@/lib/client";
+import { formatPhoneInput, onlyDigits } from "@/lib/br";
 import { useQuickReplies, useSettings } from "@/lib/hooks";
 import type { Settings } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
@@ -98,6 +99,10 @@ function MessagesForm() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (form.menuEnabled && form.financeMessage.includes("{financeiro}") && onlyDigits(form.financeWhatsapp).length < 10) {
+      alert("Informe o WhatsApp do Financeiro (DDD + número).");
+      return;
+    }
     setSaving(true);
     await setDoc(doc(db(), "settings", "general"), {
       ...form,
@@ -124,7 +129,55 @@ function MessagesForm() {
   return (
     <Section title="Mensagens automáticas" desc="Variáveis disponíveis: {nome}, {atendente}, {protocolo}. Use *texto* para negrito.">
       <form onSubmit={save} className="space-y-4">
-        {field("welcomeMessage", "Boas-vindas", "Enviada quando um cliente inicia um novo atendimento.")}
+        <div className="space-y-4 rounded-2xl border border-brand-100 bg-brand-50/40 p-4">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-brand-600"
+              checked={form.menuEnabled}
+              onChange={(e) => setForm({ ...form, menuEnabled: e.target.checked })}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-800">Menu inicial (Atendimento ou Financeiro)</span>
+              <span className="text-xs text-slate-500">
+                Antes de abrir o atendimento, pergunta o assunto. <b>1</b> = vai para a fila com protocolo · <b>2</b> = recebe o contato do financeiro.
+              </span>
+            </span>
+          </label>
+          {form.menuEnabled && (
+            <>
+              {field("menuMessage", "Mensagem do menu", "Primeira mensagem para quem chama sem atendimento aberto.")}
+              {field("menuInvalidMessage", "Resposta inválida", "Quando o cliente não responde 1 ou 2.")}
+              <div>
+                <label className="label">WhatsApp do Financeiro</label>
+                <input
+                  className="input"
+                  inputMode="tel"
+                  placeholder="(34) 99999-9999"
+                  value={formatPhoneInput(form.financeWhatsapp)}
+                  onChange={(e) => setForm({ ...form, financeWhatsapp: onlyDigits(e.target.value) })}
+                />
+              </div>
+              {field("financeMessage", "Mensagem para quem escolher Financeiro", "Use {financeiro} para inserir o link do WhatsApp do financeiro.")}
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-brand-600"
+                  checked={form.financeNotify}
+                  onChange={(e) => setForm({ ...form, financeNotify: e.target.checked })}
+                />
+                <span>
+                  <span className="block text-sm font-medium">Avisar o WhatsApp do Financeiro</span>
+                  <span className="text-xs text-slate-500">Envia para o financeiro o nome, o link do cliente e a mensagem dele.</span>
+                </span>
+              </label>
+              {form.financeNotify &&
+                field("financeNotifyMessage", "Aviso enviado ao Financeiro", "Variáveis: {nome}, {telefone} (link do cliente), {mensagem}.")}
+            </>
+          )}
+        </div>
+
+        {field("welcomeMessage", "Boas-vindas / protocolo", "Enviada quando o atendimento é aberto (após escolher 1, se o menu estiver ligado).")}
         {field("assignedMessage", "Ao pegar o atendimento", "Enviada quando um atendente assume a conversa.")}
         {field("closedMessage", "Encerramento pelo atendente", "Enviada quando o atendente finaliza.")}
         {field("inactivityMessage", "Encerramento por ausência", "Enviada quando o cliente não responde dentro do prazo.")}

@@ -93,6 +93,17 @@ export interface Settings {
   inactivityMessage: string;
   autoCloseMinutes: number;
   signMessages: boolean;
+  /** Menu inicial: pergunta o assunto antes de abrir o atendimento */
+  menuEnabled: boolean;
+  menuMessage: string;
+  menuInvalidMessage: string;
+  /** WhatsApp do financeiro (DDD + número) */
+  financeWhatsapp: string;
+  /** Resposta ao cliente que escolheu Financeiro. {financeiro} = link do WhatsApp do financeiro */
+  financeMessage: string;
+  /** Também avisar o WhatsApp do financeiro sobre o cliente */
+  financeNotify: boolean;
+  financeNotifyMessage: string;
 }
 
 export interface QuickReply {
@@ -103,7 +114,7 @@ export interface QuickReply {
 
 export const DEFAULT_SETTINGS: Settings = {
   welcomeMessage:
-    "Olá, {nome}! 👋 Bem-vindo(a) à *Drogaria Paranaíba*.\nSeu protocolo é *{protocolo}*. Em instantes um de nossos atendentes vai falar com você. 💊",
+    "Perfeito, {nome}! 😊 Seu protocolo é *{protocolo}*.\nEm instantes um de nossos atendentes vai falar com você. 💊",
   assignedMessage: "Oi, {nome}! Aqui é {atendente}, vou continuar seu atendimento. Como posso ajudar?",
   closedMessage:
     "Atendimento *{protocolo}* finalizado. Obrigado pelo contato, {nome}! Nossa tradição é cuidar de você! ❤️",
@@ -111,17 +122,38 @@ export const DEFAULT_SETTINGS: Settings = {
     "Como não tivemos retorno, o atendimento *{protocolo}* foi encerrado. Se precisar, é só mandar uma nova mensagem. ❤️",
   autoCloseMinutes: 10,
   signMessages: true,
+  menuEnabled: true,
+  menuMessage:
+    "Olá, {nome}! 👋 Bem-vindo(a) à *Drogaria Paranaíba*.\nSobre qual assunto você quer falar?\n\n*1* - Atendimento (pedidos, preços e medicamentos)\n*2* - Financeiro (boletos, pagamentos e crediário)\n\nResponda com o *número* da opção.",
+  menuInvalidMessage: "Não entendi 😅 Responda apenas com *1* para Atendimento ou *2* para Financeiro.",
+  financeWhatsapp: "",
+  financeMessage:
+    "Para assuntos financeiros, fale direto com nosso setor *Financeiro* pelo WhatsApp:\n{financeiro}\n\nObrigado, {nome}! ❤️",
+  financeNotify: true,
+  financeNotifyMessage:
+    "💰 *Cliente procurando o Financeiro*\nNome: {nome}\nWhatsApp: {telefone}\nMensagem: {mensagem}",
 };
 
 export function renderTemplate(
   tpl: string,
-  vars: { nome?: string; atendente?: string; protocolo?: number | string }
+  vars: {
+    nome?: string;
+    atendente?: string;
+    protocolo?: number | string;
+    financeiro?: string;
+    telefone?: string;
+    mensagem?: string;
+    nomeCompleto?: boolean;
+  }
 ): string {
-  const firstName = (vars.nome || "").trim().split(/\s+/)[0] || "";
+  const firstName = vars.nomeCompleto ? (vars.nome || "").trim() : (vars.nome || "").trim().split(/\s+/)[0] || "";
   return tpl
+    .replace(/\{financeiro\}/g, vars.financeiro || "")
+    .replace(/\{telefone\}/g, vars.telefone || "")
     .replace(/\{nome\}/g, firstName)
     .replace(/\{atendente\}/g, vars.atendente || "")
     .replace(/\{protocolo\}/g, vars.protocolo != null ? String(vars.protocolo) : "")
     .replace(/ +([,!.?])/g, "$1")
+    .replace(/\{mensagem\}/g, vars.mensagem || "")
     .trim();
 }
