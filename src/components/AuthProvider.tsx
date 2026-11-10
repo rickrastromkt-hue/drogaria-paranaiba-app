@@ -8,6 +8,9 @@ import type { StaffUser } from "@/lib/types";
 
 type Ctx = { user: User | null; staff: StaffUser | null; loading: boolean; logout: () => Promise<void> };
 
+// Variáveis NEXT_PUBLIC_* são gravadas no build: se faltarem, é preciso fazer um novo deploy.
+const CONFIGURED = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
 const AuthContext = createContext<Ctx>({ user: null, staff: null, loading: true, logout: async () => {} });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -16,6 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!CONFIGURED) return;
     let unsubDoc: (() => void) | undefined;
     const unsub = onAuthStateChanged(auth(), (u) => {
       unsubDoc?.();
@@ -43,6 +47,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsubDoc?.();
     };
   }, []);
+
+  if (!CONFIGURED)
+    return (
+      <main className="flex min-h-dvh items-center justify-center p-6">
+        <div className="card max-w-md space-y-2 p-6 text-sm text-slate-600">
+          <p className="font-semibold text-accent-600">Firebase não configurado neste deploy</p>
+          <p>
+            As variáveis <code>NEXT_PUBLIC_FIREBASE_*</code> não estavam disponíveis quando o site foi gerado. Cadastre-as na
+            Vercel (Settings → Environment Variables, ambiente Production) e faça um novo deploy (Deployments → Redeploy).
+          </p>
+        </div>
+      </main>
+    );
 
   return (
     <AuthContext.Provider value={{ user, staff, loading, logout: () => signOut(auth()) }}>
