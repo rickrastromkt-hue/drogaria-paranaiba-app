@@ -81,14 +81,14 @@ export function ContactForm({ contact, lockedPhone, onSaved }: Props) {
           required
         />
       </div>
-      <div className="grid grid-cols-[1fr_88px] gap-2">
+      <div className="grid grid-cols-[1fr_96px] gap-2">
         <div>
           <label className="label">Cidade</label>
           <input className="input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
         </div>
         <div>
           <label className="label">UF</label>
-          <select className="input px-2" value={form.uf} onChange={(e) => setForm({ ...form, uf: e.target.value })}>
+          <select className="input" value={form.uf} onChange={(e) => setForm({ ...form, uf: e.target.value })}>
             <option value="">—</option>
             {UFS.map((u) => (
               <option key={u} value={u}>{u}</option>

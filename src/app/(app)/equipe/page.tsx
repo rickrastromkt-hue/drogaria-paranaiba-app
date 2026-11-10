@@ -111,7 +111,7 @@ export default function EquipePage() {
               <div className="flex items-center gap-1">
                 {busy === u.uid && <Loader2 className="h-4 w-4 animate-spin text-brand-600" />}
                 <select
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                  className="input input-sm w-auto"
                   value={u.role}
                   disabled={u.uid === staff.uid}
                   onChange={(e) => patch(u, { role: e.target.value })}
