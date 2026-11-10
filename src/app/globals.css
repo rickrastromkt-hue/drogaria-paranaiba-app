@@ -73,3 +73,8 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

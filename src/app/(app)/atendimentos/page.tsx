@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { Inbox, Loader2, MessageCircleHeart, Search } from "lucide-react";
 import { db } from "@/lib/firebase";
@@ -66,10 +66,15 @@ export default function AtendimentosPage() {
     if (selectedId && !loading && !tickets.some((t) => t.id === selectedId)) setSelectedId(null);
   }, [tickets, selectedId, loading]);
 
-  // Ao pegar um atendimento da fila, muda para "Meus".
+  // Só no momento em que EU pego o atendimento aberto, muda para "Meus".
+  // (Depois disso a pessoa pode navegar livremente entre as abas.)
+  const prevAssign = useRef<{ id: string | null; to: string | null }>({ id: null, to: null });
   useEffect(() => {
-    if (selected && selected.assignedTo === staff?.uid && tab === "queue") setTab("mine");
-  }, [selected, staff?.uid, tab]);
+    const prev = prevAssign.current;
+    const to = selected?.assignedTo ?? null;
+    if (selected && prev.id === selected.id && prev.to !== staff?.uid && to === staff?.uid) setTab("mine");
+    prevAssign.current = { id: selected?.id ?? null, to };
+  }, [selected, staff?.uid]);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "mine", label: "Meus" },

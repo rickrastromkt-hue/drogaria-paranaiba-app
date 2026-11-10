@@ -1,6 +1,7 @@
 "use client";
 
-import { Bot, Check, CheckCheck, Clock, FileText, MapPin, Smartphone, User, X } from "lucide-react";
+import { Bot, Check, CheckCheck, Clock, MapPin, Smartphone, User, X } from "lucide-react";
+import { AudioPlayer, DocumentMessage, ImageMessage } from "./Media";
 import type { Message } from "@/lib/types";
 import { formatTime } from "@/lib/client";
 
@@ -12,30 +13,20 @@ function StatusIcon({ status }: { status?: Message["status"] }) {
   return <Clock className="h-3 w-3" />;
 }
 
-function Media({ m }: { m: Message }) {
+function Media({ m, mine }: { m: Message; mine: boolean }) {
   if (!m.mediaUrl) return null;
   switch (m.type) {
     case "image":
-      return (
-        <a href={m.mediaUrl} target="_blank" rel="noreferrer">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={m.mediaUrl} alt="" className="mb-1 max-h-72 rounded-lg object-cover" />
-        </a>
-      );
+      return <ImageMessage url={m.mediaUrl} caption={m.text} />;
     case "sticker":
       // eslint-disable-next-line @next/next/no-img-element
       return <img src={m.mediaUrl} alt="figurinha" className="h-28 w-28 object-contain" />;
     case "audio":
-      return <audio controls src={m.mediaUrl} className="h-10 w-64 max-w-full" />;
+      return <AudioPlayer url={m.mediaUrl} mine={mine} />;
     case "video":
       return <video controls src={m.mediaUrl} className="mb-1 max-h-72 rounded-lg" />;
     case "document":
-      return (
-        <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-lg bg-black/5 px-3 py-2 text-sm hover:bg-black/10">
-          <FileText className="h-5 w-5 shrink-0 text-brand-700" />
-          <span className="truncate">{m.fileName || "Documento"}</span>
-        </a>
-      );
+      return <DocumentMessage url={m.mediaUrl} fileName={m.fileName} />;
     case "location":
       return (
         <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 text-sm text-brand-700 hover:underline">
@@ -79,7 +70,7 @@ export function MessageBubble({ m }: { m: Message }) {
         }`}
       >
         {tag && <div className="mb-0.5 text-[11px] font-medium text-slate-500">{tag}</div>}
-        <Media m={m} />
+        <Media m={m} mine={mine} />
         {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
         <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
           {formatTime(m.createdAt)}

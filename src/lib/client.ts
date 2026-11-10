@@ -65,20 +65,16 @@ export function duration(ms: number) {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** Bipe curto para novos atendimentos na fila. */
-export function beep() {
+/** Som de notificação (public/notificacao.mp3). Limita a 1 toque a cada 1,5 s. */
+let notifAudio: HTMLAudioElement | null = null;
+let lastPlay = 0;
+export function playNotification() {
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new Ctx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = "sine";
-    o.frequency.value = 880;
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-    o.connect(g).connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + 0.4);
+    const now = Date.now();
+    if (now - lastPlay < 1500) return;
+    lastPlay = now;
+    notifAudio ??= new Audio("/notificacao.mp3");
+    notifAudio.currentTime = 0;
+    notifAudio.play().catch(() => {});
   } catch {}
 }
