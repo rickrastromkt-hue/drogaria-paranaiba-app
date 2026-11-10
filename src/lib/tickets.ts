@@ -147,12 +147,14 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
     return { ticketId: ref.id, isNew: false };
   }
 
-  const name = p.senderName || p.chatName || p.phone;
+  const waName = p.senderName || p.chatName || p.phone;
   const photo = p.senderPhoto || p.photo || null;
 
   return db().runTransaction(async (tx) => {
     const contactSnap = await tx.get(contactRef);
     const contact = contactSnap.data();
+    // Nome salvo pela equipe tem prioridade sobre o nome do WhatsApp.
+    const name: string = contact?.saved && contact?.name ? contact.name : waName;
 
     let ref: DocumentReference | null = null;
     if (contact?.activeTicketId) {
@@ -182,7 +184,7 @@ export async function handleReceived(p: ZapiReceived): Promise<{ ticketId?: stri
 
     tx.set(
       contactRef,
-      { phone: p.phone, name, photo, lastMessageAt: now, activeTicketId: ref.id, lastTicketId: ref.id },
+      { phone: p.phone, name, waName, photo, lastMessageAt: now, activeTicketId: ref.id, lastTicketId: ref.id },
       { merge: true }
     );
 

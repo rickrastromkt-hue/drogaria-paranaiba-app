@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
-import { ArrowLeft, ArrowRightLeft, CheckCircle2, Hand, Loader2, Paperclip, SendHorizontal, Timer } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, BadgeCheck, CheckCircle2, Hand, Loader2, Paperclip, SendHorizontal, Timer, UserRound, X } from "lucide-react";
 import { db, storage } from "@/lib/firebase";
 import { api, duration, formatPhone, useNow } from "@/lib/client";
-import type { Message, QuickReply, StaffUser, Ticket } from "@/lib/types";
+import type { Contact, Message, QuickReply, StaffUser, Ticket } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
 import { MessageBubble } from "./MessageBubble";
+import { ContactForm } from "./ContactForm";
 
 type Props = {
   ticket: Ticket;
@@ -38,6 +39,8 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showContact, setShowContact] = useState(false);
+  const [contact, setContact] = useState<Contact | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -57,6 +60,11 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       setLoadingMsgs(false);
     });
   }, [ticket.id]);
+
+  useEffect(
+    () => onSnapshot(doc(db(), "contacts", ticket.phone), (s) => setContact(s.exists() ? (s.data() as Contact) : null)),
+    [ticket.phone]
+  );
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
@@ -140,7 +148,8 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   let lastDay = "";
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full">
+    <div className="flex h-full min-w-0 flex-1 flex-col">
       {/* Cabeçalho */}
       <header className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-4 py-3">
         {onBack && (
@@ -150,7 +159,10 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
         )}
         <Avatar name={ticket.contactName} photo={ticket.contactPhoto} />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold text-slate-800">{ticket.contactName}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-semibold text-slate-800">{ticket.contactName}</span>
+            {contact?.saved && <BadgeCheck className="h-4 w-4 shrink-0 text-brand-600" aria-label="Contato salvo" />}
+          </div>
           <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
             <span>{formatPhone(ticket.phone)}</span>
             <span>·</span>
@@ -174,6 +186,15 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
             <Timer className="h-3.5 w-3.5" /> {duration(remaining)}
           </div>
         )}
+
+        <button
+          onClick={() => setShowContact((v) => !v)}
+          className={`btn px-2.5 ${showContact ? "bg-brand-50 text-brand-700" : "btn-ghost"}`}
+          title={contact?.saved ? "Dados do contato" : "Salvar contato"}
+        >
+          <UserRound className="h-4 w-4" />
+          <span className="hidden lg:inline">{contact?.saved ? "Contato" : "Salvar contato"}</span>
+        </button>
 
         {!readOnly && ticket.status !== "closed" && (
           <div className="flex items-center gap-1.5">
@@ -295,6 +316,30 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
           </div>
         </div>
       )}
+    </div>
+
+    {showContact && (
+      <aside className="absolute inset-y-0 right-0 z-30 flex w-full max-w-[320px] flex-col border-l border-slate-200/70 bg-white shadow-xl xl:static xl:shadow-none">
+        <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3.5">
+          <div>
+            <div className="font-semibold text-slate-800">{contact?.saved ? "Dados do contato" : "Salvar contato"}</div>
+            {contact?.saved && contact.updatedByName && (
+              <div className="text-[11px] text-slate-400">Atualizado por {contact.updatedByName}</div>
+            )}
+          </div>
+          <button onClick={() => setShowContact(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="mb-4 flex flex-col items-center gap-2 text-center">
+            <Avatar name={contact?.name || ticket.contactName} photo={contact?.photo || ticket.contactPhoto} size={64} />
+            <div className="text-sm text-slate-500">{formatPhone(ticket.phone)}</div>
+          </div>
+          <ContactForm contact={contact ?? { phone: ticket.phone, name: ticket.contactName }} lockedPhone={ticket.phone} />
+        </div>
+      </aside>
+    )}
     </div>
   );
 }

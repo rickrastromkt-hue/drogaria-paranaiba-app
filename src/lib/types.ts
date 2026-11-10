@@ -66,6 +66,26 @@ export interface Message {
   createdAt: number;
 }
 
+export interface Contact {
+  /** Igual ao id do documento: 55 + DDD + número */
+  phone: string;
+  /** Nome salvo pela equipe (ou o nome do WhatsApp enquanto não for salvo) */
+  name: string;
+  /** Nome que aparece no perfil do WhatsApp */
+  waName?: string | null;
+  photo?: string | null;
+  city?: string | null;
+  uf?: string | null;
+  cpf?: string | null;
+  saved?: boolean;
+  savedAt?: number | null;
+  updatedAt?: number | null;
+  updatedByName?: string | null;
+  lastMessageAt?: number | null;
+  activeTicketId?: string | null;
+  lastTicketId?: string | null;
+}
+
 export interface Settings {
   welcomeMessage: string;
   assignedMessage: string;

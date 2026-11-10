@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { History, Loader2, LogOut, MessageCircle, Settings, Users } from "lucide-react";
+import { BookUser, History, Loader2, LogOut, MessageCircle, Settings, Users } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { api, playNotification } from "@/lib/client";
 import { useAuth } from "@/components/AuthProvider";
@@ -13,6 +13,7 @@ import { Avatar } from "@/components/Avatar";
 
 const NAV = [
   { href: "/atendimentos", label: "Atendimentos", icon: MessageCircle },
+  { href: "/contatos", label: "Contatos", icon: BookUser },
   { href: "/historico", label: "Histórico", icon: History },
   { href: "/equipe", label: "Equipe", icon: Users, admin: true },
   { href: "/configuracoes", label: "Ajustes", icon: Settings, admin: true },

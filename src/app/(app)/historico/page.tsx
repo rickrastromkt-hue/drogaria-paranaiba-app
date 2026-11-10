@@ -16,6 +16,12 @@ export default function HistoricoPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<Ticket | null>(null);
 
+  // Permite abrir já filtrado: /historico?q=5534999999999
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q);
+  }, []);
+
   useEffect(() => {
     const q = query(collection(db(), "tickets"), orderBy("closedAt", "desc"), limit(max));
     return onSnapshot(q, (snap) => {

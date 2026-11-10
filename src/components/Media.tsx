@@ -58,9 +58,10 @@ export function ImageMessage({ url, caption }: { url: string; caption?: string }
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button onClick={() => setOpen(true)} className="mb-1 block overflow-hidden rounded-lg">
+      <button onClick={() => setOpen(true)} className="mb-1 block overflow-hidden rounded-lg bg-black/5">
+        {/* Imagem inteira, proporcional (sem corte) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt="" className="max-h-72 w-full cursor-zoom-in object-cover transition hover:brightness-95" />
+        <img src={url} alt="" className="block h-auto max-h-[420px] w-auto max-w-full min-w-[120px] cursor-zoom-in object-contain transition hover:brightness-95" />
       </button>
       {open && <Lightbox url={url} caption={caption} onClose={() => setOpen(false)} />}
     </>
