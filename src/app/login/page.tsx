@@ -58,10 +58,10 @@ export default function LoginPage() {
   const blocked = !loading && user && (!staff || !staff.active);
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-brand-50 via-white to-sky-50 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-brand-50 via-white to-accent-50 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Logo className="h-16" />
+          <Logo className="h-24" />
           <div>
             <h1 className="text-xl font-semibold text-slate-800">Central de Atendimento</h1>
             <p className="text-sm text-slate-500">Entre para atender os clientes no WhatsApp</p>

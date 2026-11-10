@@ -73,7 +73,7 @@ export function MessageBubble({ m }: { m: Message }) {
         className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
           mine
             ? m.source === "bot"
-              ? "rounded-br-md bg-sky-50 text-slate-700"
+              ? "rounded-br-md bg-slate-100 text-slate-700"
               : "rounded-br-md bg-brand-100/80 text-slate-800"
             : "rounded-bl-md bg-white text-slate-800"
         }`}

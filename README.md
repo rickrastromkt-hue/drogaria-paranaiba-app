@@ -81,5 +81,5 @@ npm run dev
 ```
 
 ## Logo e cores
-- Coloque o logo em `public/logo.png` (enquanto não existir, aparece o `public/logo.svg` provisório).
-- As cores da marca ficam no topo de `src/app/globals.css` (`--color-brand-*`).
+- `public/logo.png` = logo completo (login) · `public/icon.png` = coração (barra lateral e favicon).
+- Cores em `src/app/globals.css`: `brand` = azul do logo (botões), `accent` = vermelho do logo (fila e destaques).

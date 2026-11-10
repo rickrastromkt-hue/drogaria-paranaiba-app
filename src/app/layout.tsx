@@ -6,9 +6,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Atendimento WhatsApp",
+  title: "Atendimento · Drogaria Paranaíba",
   description: "Central de atendimento via WhatsApp da farmácia",
-  icons: { icon: "/logo.svg" },
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

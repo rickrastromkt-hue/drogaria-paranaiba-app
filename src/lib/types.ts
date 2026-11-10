@@ -82,12 +82,12 @@ export interface QuickReply {
 
 export const DEFAULT_SETTINGS: Settings = {
   welcomeMessage:
-    "Olá, {nome}! 👋 Bem-vindo(a) à nossa farmácia.\nSeu protocolo é *{protocolo}*. Em instantes um de nossos atendentes vai falar com você. 💊",
+    "Olá, {nome}! 👋 Bem-vindo(a) à *Drogaria Paranaíba*.\nSeu protocolo é *{protocolo}*. Em instantes um de nossos atendentes vai falar com você. 💊",
   assignedMessage: "Oi, {nome}! Aqui é {atendente}, vou continuar seu atendimento. Como posso ajudar?",
   closedMessage:
-    "Atendimento *{protocolo}* finalizado. Obrigado pelo contato, {nome}! Qualquer coisa é só chamar. 💚",
+    "Atendimento *{protocolo}* finalizado. Obrigado pelo contato, {nome}! Nossa tradição é cuidar de você! ❤️",
   inactivityMessage:
-    "Como não tivemos retorno, o atendimento *{protocolo}* foi encerrado. Se precisar, é só mandar uma nova mensagem. 💚",
+    "Como não tivemos retorno, o atendimento *{protocolo}* foi encerrado. Se precisar, é só mandar uma nova mensagem. ❤️",
   autoCloseMinutes: 10,
   signMessages: true,
 };

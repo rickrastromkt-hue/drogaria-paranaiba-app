@@ -41,10 +41,10 @@ export default function SetupPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-brand-50 via-white to-sky-50 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-brand-50 via-white to-accent-50 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Logo className="h-16" />
+          <Logo className="h-24" />
           <h1 className="text-xl font-semibold">Configuração inicial</h1>
         </div>
         {needed === null ? (

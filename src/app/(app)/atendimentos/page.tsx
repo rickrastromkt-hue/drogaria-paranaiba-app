@@ -99,7 +99,7 @@ export default function AtendimentosPage() {
                   {count > 0 && (
                     <span
                       className={`rounded-full px-1.5 text-[11px] ${
-                        id === "queue" ? "bg-rose-500 text-white" : active ? "bg-brand-100 text-brand-700" : "bg-slate-200 text-slate-600"
+                        id === "queue" ? "bg-accent-500 text-white" : active ? "bg-brand-100 text-brand-700" : "bg-slate-200 text-slate-600"
                       }`}
                     >
                       {count}
@@ -141,7 +141,7 @@ export default function AtendimentosPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate font-medium text-slate-800">{t.contactName}</span>
-                          <span className={`shrink-0 text-[11px] ${t.status === "waiting" ? "font-medium text-rose-500" : "text-slate-400"}`}>
+                          <span className={`shrink-0 text-[11px] ${t.status === "waiting" ? "font-medium text-accent-500" : "text-slate-400"}`}>
                             {relative(t.status === "waiting" ? t.createdAt : t.lastMessageAt, now)}
                           </span>
                         </div>
@@ -179,7 +179,7 @@ export default function AtendimentosPage() {
         ) : (
           <div className="chat-bg flex h-full flex-col items-center justify-center gap-3 text-center text-slate-400">
             <div className="rounded-full bg-white p-5 shadow-sm">
-              <MessageCircleHeart className="h-10 w-10 text-brand-500" />
+              <MessageCircleHeart className="h-10 w-10 text-accent-500" />
             </div>
             <p className="font-medium text-slate-600">Olá, {staff?.name?.split(" ")[0]}!</p>
             <p className="max-w-xs text-sm">Selecione um atendimento ao lado ou pegue o próximo cliente da fila.</p>

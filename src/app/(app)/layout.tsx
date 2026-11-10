@@ -43,7 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           beep();
           if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
             const t = fresh[0].data();
-            new Notification("Novo cliente na fila", { body: `${t.contactName}: ${t.lastMessagePreview}`, icon: "/logo.svg" });
+            new Notification("Novo cliente na fila", { body: `${t.contactName}: ${t.lastMessagePreview}`, icon: "/icon.png" });
           }
         }
       }
@@ -61,7 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [staff?.active]);
 
   useEffect(() => {
-    document.title = waiting ? `(${waiting}) Atendimento WhatsApp` : "Atendimento WhatsApp";
+    document.title = waiting ? `(${waiting}) Atendimento · Drogaria Paranaíba` : "Atendimento · Drogaria Paranaíba";
   }, [waiting]);
 
   if (loading || !staff?.active)
@@ -77,7 +77,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-dvh flex-col md:flex-row">
       <aside className="hidden w-[84px] shrink-0 flex-col items-center border-r border-slate-200/70 bg-white py-4 md:flex">
         <Link href="/atendimentos" className="mb-6 px-2">
-          <Logo className="h-10" />
+          <Logo variant="icon" className="h-11" />
         </Link>
         <nav className="flex flex-1 flex-col items-center gap-1">
           {items.map(({ href, label, icon: Icon }) => {
@@ -93,7 +93,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <Icon className="h-5 w-5" />
                 {label}
                 {href === "/atendimentos" && waiting > 0 && (
-                  <span className="absolute right-2 top-1.5 min-w-[18px] rounded-full bg-rose-500 px-1 text-center text-[10px] leading-[18px] text-white">
+                  <span className="absolute right-2 top-1.5 min-w-[18px] rounded-full bg-accent-500 px-1 text-center text-[10px] leading-[18px] text-white">
                     {waiting}
                   </span>
                 )}
@@ -121,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Icon className="h-5 w-5" />
               {label}
               {href === "/atendimentos" && waiting > 0 && (
-                <span className="absolute right-[calc(50%-20px)] top-1 rounded-full bg-rose-500 px-1.5 text-[10px] text-white">{waiting}</span>
+                <span className="absolute right-[calc(50%-20px)] top-1 rounded-full bg-accent-500 px-1.5 text-[10px] text-white">{waiting}</span>
               )}
             </Link>
           );
