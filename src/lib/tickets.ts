@@ -190,9 +190,40 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
 
       if (pendingActive || choice) {
         if (choice === "finance") {
-          const first = [...pending, incoming].find((m) => m.text && !parseChoice(m.text));
-          tx.set(contactRef, { ...base, menu: { pendingSince: null, pending: [], financeAt: now } }, { merge: true });
-          return { action: "finance", name, firstText: first?.text || content.text };
+          // Registra como atendimento já ENCERRADO (aparece no Histórico como "Financeiro").
+          const msgs = [...pending, incoming];
+          const first = msgs.find((m) => m.text && !parseChoice(m.text));
+          const fref = db().collection("tickets").doc();
+          const finTicket: Omit<Ticket, "id"> = {
+            protocol: nextProtocol(tx, counterSnap!),
+            phone: p.phone,
+            contactName: name,
+            contactPhoto: photo,
+            status: "closed",
+            assignedTo: null,
+            assignedName: null,
+            createdAt: msgs[0].createdAt,
+            assignedAt: null,
+            closedAt: now,
+            closedBy: "finance",
+            closedByName: null,
+            lastMessageAt: now,
+            lastMessagePreview: previewOf(content.type, content.text),
+            lastMessageFromMe: false,
+            awaitingCustomerSince: null,
+            unread: 0,
+          };
+          tx.set(fref, finTicket);
+          for (const m of msgs) {
+            const { id, ...rest } = m;
+            tx.set(fref.collection("messages").doc(id), { source: "customer", ...rest } satisfies Omit<Message, "id">);
+          }
+          tx.set(
+            contactRef,
+            { ...base, activeTicketId: null, lastTicketId: fref.id, menu: { pendingSince: null, pending: [], financeAt: now } },
+            { merge: true }
+          );
+          return { action: "finance", ticketId: fref.id, name, firstText: first?.text || content.text };
         }
         if (choice === "service") {
           backlog = pending; // mensagens enviadas antes da escolha entram no atendimento
@@ -205,11 +236,8 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
           );
           return { action: "invalid", name };
         }
-      } else if (menu.financeAt && now - menu.financeAt < FINANCE_COOLDOWN) {
-        // Acabou de ser direcionado ao financeiro ("ok, obrigado"): não reenvia o menu.
-        tx.set(contactRef, base, { merge: true });
-        return { action: "none" };
       } else {
+        // Nunca ignora mensagem: sem atendimento aberto, sempre responde com o menu.
         tx.set(contactRef, { ...base, menu: { pendingSince: now, pending: [incoming], financeAt: null } }, { merge: true });
         return { action: "menu", name };
       }
@@ -373,7 +401,6 @@ export async function startConversation(user: StaffUser, rawPhone: string, text:
 /* ---------- Menu inicial: tipos e helpers ---------- */
 
 const MENU_TTL = 30 * 60_000; // menu sem resposta expira em 30 min
-const FINANCE_COOLDOWN = 15 * 60_000; // após direcionar ao financeiro, silêncio por 15 min
 
 type PendingMessage = ReturnType<typeof parseContent> & { id: string; createdAt: number };
 type MenuState = { pendingSince?: number | null; pending?: PendingMessage[]; financeAt?: number | null };
@@ -446,7 +473,11 @@ export async function afterReceived(phone: string, r: ReceivedResult | null) {
   if (r.action === "finance") {
     const fin = normalizePhone(s.financeWhatsapp || "");
     const link = fin ? `https://wa.me/${fin}` : "";
-    await sendLoose(phone, renderTemplate(s.financeMessage, { nome: r.name, financeiro: link }));
+    const finText = renderTemplate(s.financeMessage, { nome: r.name, financeiro: link });
+    if (r.ticketId) {
+      await addSystemNote(ticketRef(r.ticketId), "Direcionado ao Financeiro — atendimento encerrado");
+      await sendOutbound({ id: r.ticketId, phone }, { type: "text", text: finText }, { source: "bot", startTimer: false });
+    } else await sendLoose(phone, finText);
     if (s.financeNotify && fin && fin !== phone) {
       await sendLoose(
         fin,

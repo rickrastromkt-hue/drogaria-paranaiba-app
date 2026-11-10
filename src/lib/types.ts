@@ -10,7 +10,7 @@ export interface StaffUser {
 }
 
 export type TicketStatus = "waiting" | "open" | "closed";
-export type ClosedBy = "agent" | "inactivity";
+export type ClosedBy = "agent" | "inactivity" | "finance";
 
 export interface Ticket {
   id: string;

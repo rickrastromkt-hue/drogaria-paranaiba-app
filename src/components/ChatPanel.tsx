@@ -257,7 +257,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       {readOnly || ticket.status === "closed" ? (
         <div className="border-t border-slate-200/70 bg-white px-4 py-3 text-center text-sm text-slate-500">
           Atendimento encerrado
-          {ticket.closedBy === "inactivity" ? " por ausência do cliente" : ticket.closedByName ? ` por ${ticket.closedByName}` : ""}.
+          {ticket.closedBy === "inactivity" ? " por ausência do cliente" : ticket.closedBy === "finance" ? " — cliente enviado ao Financeiro" : ticket.closedByName ? ` por ${ticket.closedByName}` : ""}.
         </div>
       ) : ticket.status === "waiting" ? (
         <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 py-3">

@@ -91,7 +91,7 @@ export default function HistoricoPage() {
                     <td className="px-4 py-3">
                       <div className="text-slate-600">{t.closedAt ? formatDateTime(t.closedAt) : "—"}</div>
                       <div className="flex items-center gap-1 text-xs text-slate-400">
-                        {t.closedBy === "inactivity" ? (<><Bot className="h-3 w-3" /> Ausência do cliente</>) : t.closedByName ? `por ${t.closedByName}` : ""}
+                        {t.closedBy === "inactivity" ? (<><Bot className="h-3 w-3" /> Ausência do cliente</>) : t.closedBy === "finance" ? (<><Bot className="h-3 w-3" /> Enviado ao Financeiro</>) : t.closedByName ? `por ${t.closedByName}` : ""}
                       </div>
                     </td>
                   </tr>
