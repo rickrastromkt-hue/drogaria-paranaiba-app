@@ -180,7 +180,9 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
       const pendingActive = !!menu.pendingSince && now - menu.pendingSince < MENU_TTL;
       const pending = pendingActive ? menu.pending || [] : [];
       if (pending.some((m) => m.id === msgId)) return { action: "none" };
-      const choice = parseChoice(content.text);
+      // Toque em botão/lista chega com o id da opção ("1" ou "2").
+      const choiceId = p.buttonsResponseMessage?.buttonId || p.listResponseMessage?.selectedRowId || "";
+      const choice = parseChoice(choiceId) || parseChoice(content.text, settings);
 
       if (pendingActive || choice) {
         if (choice === "finance") {
@@ -283,7 +285,13 @@ export type ReceivedResult = {
   firstText?: string;
 };
 
-function parseChoice(text: string): "service" | "finance" | null {
+function parseChoice(text: string, s0?: Settings): "service" | "finance" | null {
+  const norm = (v: string) =>
+    (v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (s0) {
+    if (s0.menuOption1Label && norm(text) === norm(s0.menuOption1Label)) return "service";
+    if (s0.menuOption2Label && norm(text) === norm(s0.menuOption2Label)) return "finance";
+  }
   const s = (text || "")
     .toLowerCase()
     .normalize("NFD")
@@ -301,14 +309,39 @@ async function sendLoose(phone: string, text: string) {
   await zapi.sendText(phone, text);
 }
 
+/** Envia o menu no estilo configurado; se botões/lista falharem, cai para o texto. */
+async function sendMenu(phone: string, s: Settings, name?: string) {
+  const o1 = s.menuOption1Label || "Atendimento";
+  const o2 = s.menuOption2Label || "Financeiro";
+  const msg = renderTemplate(s.menuButtonsMessage || s.menuMessage, { nome: name });
+  try {
+    if (s.menuStyle === "buttons")
+      return void (await zapi.sendButtons(phone, msg, [
+        { id: "1", label: o1 },
+        { id: "2", label: o2 },
+      ]));
+    if (s.menuStyle === "list")
+      return void (await zapi.sendOptionList(phone, msg, "Escolher assunto", [
+        { id: "1", title: o1 },
+        { id: "2", title: o2 },
+      ]));
+  } catch (e) {
+    console.error("Botões/lista falharam, enviando menu em texto", e);
+  }
+  await sendLoose(phone, renderTemplate(s.menuMessage, { nome: name }));
+}
+
 /** Ações automáticas depois de registrar a mensagem recebida. */
 export async function afterReceived(phone: string, r: ReceivedResult | null) {
   if (!r) return;
   if (r.action === "welcome" && r.ticketId) return sendWelcome(r.ticketId);
   if (r.action === "none") return;
   const s = await getSettings();
-  if (r.action === "menu") return sendLoose(phone, renderTemplate(s.menuMessage, { nome: r.name }));
-  if (r.action === "invalid") return sendLoose(phone, renderTemplate(s.menuInvalidMessage, { nome: r.name }));
+  if (r.action === "menu") return sendMenu(phone, s, r.name);
+  if (r.action === "invalid") {
+    if (s.menuStyle === "text") return sendLoose(phone, renderTemplate(s.menuInvalidMessage, { nome: r.name }));
+    return sendMenu(phone, { ...s, menuButtonsMessage: "Por favor, toque em uma das opções abaixo 👇" }, r.name);
+  }
   if (r.action === "finance") {
     const fin = normalizePhone(s.financeWhatsapp || "");
     const link = fin ? `https://wa.me/${fin}` : "";

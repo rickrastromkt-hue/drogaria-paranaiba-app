@@ -46,6 +46,16 @@ export const zapi = {
     const ext = (fileName.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
     return call<SendResult>("POST", `/send-document/${ext}`, { phone, document, fileName });
   },
+  /** Botões de resposta rápida (depende do WhatsApp do cliente exibir). */
+  sendButtons: (phone: string, message: string, buttons: { id: string; label: string }[]) =>
+    call<SendResult>("POST", "/send-button-list", { phone, message, buttonList: { buttons } }),
+  /** Lista de opções (abre um menu ao tocar). */
+  sendOptionList: (phone: string, message: string, buttonLabel: string, options: { id: string; title: string; description?: string }[]) =>
+    call<SendResult>("POST", "/send-option-list", {
+      phone,
+      message,
+      optionList: { title: "Opções", buttonLabel, options },
+    }),
   status: () =>
     call<{ connected: boolean; smartphoneConnected?: boolean; error?: string }>("GET", "/status"),
   qrCodeImage: () => call<{ value?: string }>("GET", "/qr-code/image"),
@@ -80,8 +90,8 @@ export interface ZapiReceived {
   sticker?: { stickerUrl?: string; mimeType?: string };
   location?: { latitude?: number; longitude?: number; name?: string; address?: string };
   contact?: { displayName?: string; vCard?: string };
-  buttonsResponseMessage?: { message?: string };
-  listResponseMessage?: { message?: string; title?: string };
+  buttonsResponseMessage?: { message?: string; buttonId?: string };
+  listResponseMessage?: { message?: string; title?: string; selectedRowId?: string };
   reaction?: unknown;
 }
 
@@ -126,9 +136,10 @@ export function parseContent(p: ZapiReceived): ParsedContent | null {
     return { ...base, type: "location", text: [p.location.name, p.location.address].filter(Boolean).join(" — "), mediaUrl: url };
   }
   if (p.contact) return { ...base, type: "contact", text: p.contact.displayName || "Contato" };
-  if (p.buttonsResponseMessage?.message) return { ...base, type: "text", text: p.buttonsResponseMessage.message };
-  if (p.listResponseMessage?.message || p.listResponseMessage?.title)
-    return { ...base, type: "text", text: p.listResponseMessage.message || p.listResponseMessage.title || "" };
+  if (p.buttonsResponseMessage?.message || p.buttonsResponseMessage?.buttonId)
+    return { ...base, type: "text", text: p.buttonsResponseMessage.message || p.buttonsResponseMessage.buttonId || "" };
+  if (p.listResponseMessage?.title || p.listResponseMessage?.message)
+    return { ...base, type: "text", text: p.listResponseMessage.title || p.listResponseMessage.message || "" };
   return { ...base, type: "other", text: "[mensagem não suportada]" };
 }
 

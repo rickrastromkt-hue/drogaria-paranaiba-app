@@ -146,8 +146,44 @@ function MessagesForm() {
           </label>
           {form.menuEnabled && (
             <>
-              {field("menuMessage", "Mensagem do menu", "Primeira mensagem para quem chama sem atendimento aberto.")}
-              {field("menuInvalidMessage", "Resposta inválida", "Quando o cliente não responde 1 ou 2.")}
+              <div>
+                <label className="label">Formato do menu</label>
+                <select
+                  className="input"
+                  value={form.menuStyle}
+                  onChange={(e) => setForm({ ...form, menuStyle: e.target.value as Settings["menuStyle"] })}
+                >
+                  <option value="buttons">Botões (o cliente toca na opção)</option>
+                  <option value="list">Lista de opções (abre um menu ao tocar)</option>
+                  <option value="text">Texto com números (1 / 2)</option>
+                </select>
+                {form.menuStyle !== "text" && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Alguns aparelhos/versões do WhatsApp não exibem botões. Se a Z-API recusar o envio, o menu em texto é usado no lugar.
+                  </p>
+                )}
+              </div>
+              {form.menuStyle !== "text" && (
+                <>
+                  {field("menuButtonsMessage", "Texto acima dos botões", "Primeira mensagem para quem chama sem atendimento aberto.")}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="label">Botão 1 (abre atendimento)</label>
+                      <input className="input" maxLength={20} value={form.menuOption1Label} onChange={(e) => setForm({ ...form, menuOption1Label: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="label">Botão 2 (financeiro)</label>
+                      <input className="input" maxLength={20} value={form.menuOption2Label} onChange={(e) => setForm({ ...form, menuOption2Label: e.target.value })} />
+                    </div>
+                  </div>
+                </>
+              )}
+              {field(
+                "menuMessage",
+                form.menuStyle === "text" ? "Mensagem do menu" : "Menu em texto (reserva)",
+                form.menuStyle === "text" ? "Primeira mensagem para quem chama sem atendimento aberto." : "Usado se os botões não puderem ser enviados. O cliente também pode responder digitando 1 ou 2."
+              )}
+              {form.menuStyle === "text" && field("menuInvalidMessage", "Resposta inválida", "Quando o cliente não responde 1 ou 2.")}
               <div>
                 <label className="label">WhatsApp do Financeiro</label>
                 <input

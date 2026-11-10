@@ -97,6 +97,12 @@ export interface Settings {
   menuEnabled: boolean;
   menuMessage: string;
   menuInvalidMessage: string;
+  /** Como o menu é mostrado: texto com números, botões ou lista de opções */
+  menuStyle: "text" | "buttons" | "list";
+  /** Texto que acompanha os botões/lista */
+  menuButtonsMessage: string;
+  menuOption1Label: string;
+  menuOption2Label: string;
   /** WhatsApp do financeiro (DDD + número) */
   financeWhatsapp: string;
   /** Resposta ao cliente que escolheu Financeiro. {financeiro} = link do WhatsApp do financeiro */
@@ -126,6 +132,11 @@ export const DEFAULT_SETTINGS: Settings = {
   menuMessage:
     "Olá, {nome}! 👋 Bem-vindo(a) à *Drogaria Paranaíba*.\nSobre qual assunto você quer falar?\n\n*1* - Atendimento (pedidos, preços e medicamentos)\n*2* - Financeiro (boletos, pagamentos e crediário)\n\nResponda com o *número* da opção.",
   menuInvalidMessage: "Não entendi 😅 Responda apenas com *1* para Atendimento ou *2* para Financeiro.",
+  menuStyle: "buttons",
+  menuButtonsMessage:
+    "Olá, {nome}! 👋 Bem-vindo(a) à *Drogaria Paranaíba*.\nSobre qual assunto você quer falar? Toque em uma opção abaixo:",
+  menuOption1Label: "Atendimento",
+  menuOption2Label: "Financeiro",
   financeWhatsapp: "",
   financeMessage:
     "Para assuntos financeiros, fale direto com nosso setor *Financeiro* pelo WhatsApp:\n{financeiro}\n\nObrigado, {nome}! ❤️",
