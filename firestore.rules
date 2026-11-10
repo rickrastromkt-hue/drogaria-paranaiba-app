@@ -32,7 +32,8 @@ service cloud.firestore {
 
     match /settings/{doc} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      // A identidade da empresa (branding) só é alterada pelo servidor, com a senha do desenvolvedor.
+      allow write: if isAdmin() && doc != 'branding';
     }
 
     match /quickReplies/{id} {

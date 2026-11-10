@@ -83,7 +83,7 @@ npm run dev
 ```
 
 ## Logo, nome e cores
-Tudo em **Ajustes → Empresa** (fica salvo em `settings/branding` no Firestore de cada empresa):
+Tudo em **Ajustes → Ajuste do desenvolvedor** (protegido por senha do desenvolvedor; para trocar a senha numa instalação use `DEV_PASSWORD_SALT`/`DEV_PASSWORD_HASH`) (fica salvo em `settings/branding` no Firestore de cada empresa):
 - nome e slogan (usados no sistema e nas mensagens com `{empresa}` e `{slogan}`);
 - logo completo (login) e ícone quadrado (barra lateral, aba do navegador, notificações);
 - cor principal e cor de destaque (a paleta inteira é gerada a partir delas).

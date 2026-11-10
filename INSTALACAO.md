@@ -41,7 +41,7 @@ Tempo estimado: **30 minutos**.
 ## 4. Primeiro acesso
 
 1. Abra `https://SEU-DOMINIO/setup` e informe o **nome da empresa** e os dados do **administrador**.
-2. Em **Ajustes → Empresa**, envie o **logo** e o **ícone**, escolha as **cores** e o **slogan**, depois **Salvar identidade**.
+2. No fim de **Ajustes**, clique em **Ajuste do desenvolvedor** (pede a senha do desenvolvedor), envie o **logo** e o **ícone**, escolha as **cores** e o **slogan**, depois **Salvar identidade**.
 3. Em **Ajustes → WhatsApp**, leia o **QR Code** com o celular da empresa e clique em **Configurar webhook automaticamente**.
 4. Em **Ajustes → Mensagens automáticas**, revise os textos do menu, boas-vindas, encerramento e o **WhatsApp do Financeiro**.
 5. Em **Equipe**, cadastre os atendentes.

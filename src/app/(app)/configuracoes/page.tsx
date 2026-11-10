@@ -9,7 +9,7 @@ import { formatPhoneInput, onlyDigits } from "@/lib/br";
 import { useQuickReplies, useSettings } from "@/lib/hooks";
 import type { Settings } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
-import { BrandingForm } from "@/components/BrandingForm";
+import { DevSettings } from "@/components/DevSettings";
 import { Credit } from "@/components/Credit";
 
 type ZStatus = { connected: boolean; smartphoneConnected?: boolean; error?: string; qr?: string | null };
@@ -311,14 +311,13 @@ export default function ConfiguracoesPage() {
       <div className="mx-auto flex min-h-full max-w-5xl flex-col space-y-5 p-4 sm:p-6">
         <div>
           <h1 className="text-xl font-semibold">Ajustes</h1>
-          <p className="text-sm text-slate-500">Empresa, conexão, mensagens automáticas e respostas rápidas</p>
+          <p className="text-sm text-slate-500">Conexão, mensagens automáticas e respostas rápidas</p>
         </div>
-        <Section title="Empresa" desc="Nome, logo e cores do sistema. As mudanças aparecem na hora para você conferir antes de salvar.">
-          <BrandingForm />
-        </Section>
+
         <ConnectionCard />
         <MessagesForm />
         <QuickRepliesCard />
+        <DevSettings />
         <Credit className="mt-auto pt-10 text-center" />
       </div>
     </div>

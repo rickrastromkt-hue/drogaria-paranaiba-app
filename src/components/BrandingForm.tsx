@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { doc, setDoc } from "firebase/firestore";
 import { ImageUp, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
-import { db } from "@/lib/firebase";
+import { api } from "@/lib/client";
 import { DEFAULT_LOGO, type Branding } from "@/lib/branding";
 import { useBranding } from "./BrandingProvider";
 
@@ -96,12 +95,13 @@ function ImagePicker({
   );
 }
 
-export function BrandingForm() {
+export function BrandingForm({ password }: { password: string }) {
   const { branding, refresh, preview } = useBranding();
   const [form, setForm] = useState<Branding>(branding);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!dirty) setForm(branding);
@@ -120,7 +120,14 @@ export function BrandingForm() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await setDoc(doc(db(), "settings", "branding"), { ...form, companyName: form.companyName.trim(), slogan: form.slogan.trim() });
+    setError("");
+    try {
+      await api("/api/branding", { ...form, password });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar");
+      setSaving(false);
+      return;
+    }
     await refresh();
     preview(null);
     setDirty(false);
@@ -203,6 +210,7 @@ export function BrandingForm() {
       </div>
 
       <div className="flex items-center justify-end gap-3">
+        {error && <span className="text-sm text-accent-600">{error}</span>}
         {saved && <span className="text-sm text-brand-700">Salvo!</span>}
         {dirty && (
           <button type="button" className="btn btn-ghost" onClick={reset}>
