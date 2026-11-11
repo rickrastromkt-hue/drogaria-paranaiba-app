@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { Inbox, Loader2, MessageCircleHeart, MessageSquarePlus, Search } from "lucide-react";
+import { Inbox, ListChecks, Loader2, MessageCircleHeart, MessageSquarePlus, Search } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { relative, useNow } from "@/lib/client";
 import { useQuickReplies, useSettings, useTeam } from "@/lib/hooks";
@@ -12,8 +12,9 @@ import { Avatar } from "@/components/Avatar";
 import { ChatPanel } from "@/components/ChatPanel";
 import { Credit } from "@/components/Credit";
 import { NewConversation } from "@/components/NewConversation";
+import { MenuPanel, type MenuContact } from "@/components/MenuPanel";
 
-type Tab = "mine" | "queue" | "team";
+type Tab = "mine" | "queue" | "team" | "menu";
 
 export default function AtendimentosPage() {
   const { me: staff } = useAuth(); // identidade efetiva (quem está atendendo)
@@ -92,7 +93,7 @@ export default function AtendimentosPage() {
   }, [loading, tickets, staff?.uid]);
 
 
-  const current = tab ? groups[tab] : [];
+  const current: Ticket[] = tab && tab !== "menu" ? groups[tab] : [];
   const term = search.trim().toLowerCase();
   const visible = term
     ? current.filter(
@@ -103,15 +104,35 @@ export default function AtendimentosPage() {
       )
     : current;
 
-  const selected = tickets.find((t) => t.id === selectedId) || null;
+  // Clientes no menu (receberam as opções e ainda não escolheram)
+  const [menuContacts, setMenuContacts] = useState<MenuContact[]>([]);
+  const [menuPhone, setMenuPhone] = useState<string | null>(null);
+  useEffect(
+    () =>
+      onSnapshot(query(collection(db(), "contacts"), where("menu.pendingSince", ">", 0)), (snap) =>
+        setMenuContacts(
+          snap.docs
+            .map((d) => ({ ...(d.data() as MenuContact), phone: d.id }))
+            .sort((a, b) => (b.menu?.pendingSince || 0) - (a.menu?.pendingSince || 0))
+        )
+      ),
+    []
+  );
+  const menuSelected = tab === "menu" ? menuContacts.find((c) => c.phone === menuPhone) || null : null;
+  const menuVisible = menuContacts.filter((c) => {
+    const term = search.trim().toLowerCase();
+    return !term || c.name?.toLowerCase().includes(term) || c.phone.includes(term.replace(/\D/g, "") || "§");
+  });
+
+  const selected = tab === "menu" ? null : tickets.find((t) => t.id === selectedId) || null;
 
   // Celular: com a conversa aberta, esconde a barra de navegação de baixo.
   useEffect(() => {
-    document.body.dataset.chatOpen = selected ? "1" : "0";
+    document.body.dataset.chatOpen = selected || menuSelected ? "1" : "0";
     return () => {
       document.body.dataset.chatOpen = "0";
     };
-  }, [selected]);
+  }, [selected, menuSelected]);
 
   // Se o atendimento selecionado for encerrado, sai dele.
   useEffect(() => {
@@ -133,12 +154,13 @@ export default function AtendimentosPage() {
     { id: "mine", label: "Meus" },
     { id: "queue", label: "Fila" },
     { id: "team", label: "Equipe" },
+    { id: "menu", label: "Menu" },
   ];
 
   return (
     <div className="flex h-full">
       {/* Lista */}
-      <section className={`w-full shrink-0 flex-col border-r border-slate-200/70 bg-white md:flex md:w-[340px] lg:w-[380px] ${selected ? "hidden" : "flex"}`}>
+      <section className={`w-full shrink-0 flex-col border-r border-slate-200/70 bg-white md:flex md:w-[340px] lg:w-[380px] ${selected || menuSelected ? "hidden" : "flex"}`}>
         <div className="space-y-3 px-4 pb-3 pt-4">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold text-slate-800">Atendimentos</h1>
@@ -148,7 +170,7 @@ export default function AtendimentosPage() {
           </div>
           <div className="flex rounded-xl bg-slate-100 p-1">
             {TABS.map(({ id, label }) => {
-              const count = groups[id].length;
+              const count = id === "menu" ? menuContacts.length : groups[id].length;
               const active = tab === id;
               return (
                 <button
@@ -162,7 +184,7 @@ export default function AtendimentosPage() {
                   {count > 0 && (
                     <span
                       className={`rounded-full px-1.5 text-[11px] ${
-                        id === "queue" ? "bg-accent-500 text-white" : active ? "bg-brand-100 text-brand-700" : "bg-slate-200 text-slate-600"
+                        id === "queue" ? "bg-accent-500 text-white" : id === "menu" ? "bg-amber-400 text-white" : active ? "bg-brand-100 text-brand-700" : "bg-slate-200 text-slate-600"
                       }`}
                     >
                       {count}
@@ -179,7 +201,40 @@ export default function AtendimentosPage() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading ? (
+          {tab === "menu" ? (
+            menuVisible.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 px-6 py-14 text-center text-sm text-slate-400">
+                <ListChecks className="h-8 w-8" />
+                Ninguém parado no menu
+              </div>
+            ) : (
+              <ul>
+                {menuVisible.map((c) => {
+                  const last = c.menu?.pending?.[c.menu.pending.length - 1];
+                  const active = c.phone === menuPhone;
+                  return (
+                    <li key={c.phone}>
+                      <button
+                        onClick={() => setMenuPhone(c.phone)}
+                        className={`flex w-full items-center gap-3 border-l-[3px] px-4 py-3 text-left transition ${
+                          active ? "border-amber-400 bg-amber-50/60" : "border-transparent hover:bg-slate-50"
+                        }`}
+                      >
+                        <Avatar name={c.name} photo={c.photo} size={44} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-medium text-slate-800">{c.name}</span>
+                            <span className="shrink-0 text-[11px] font-medium text-amber-600">{relative(c.menu?.pendingSince || 0, now)}</span>
+                          </div>
+                          <div className="truncate text-sm text-slate-500">{last ? last.text || "📎 Arquivo" : "Sem resposta ao menu"}</div>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )
+          ) : loading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
             </div>
@@ -247,8 +302,20 @@ export default function AtendimentosPage() {
       )}
 
       {/* Conversa */}
-      <section className={`min-w-0 flex-1 ${selected ? "block" : "hidden md:block"}`}>
-        {selected ? (
+      <section className={`min-w-0 flex-1 ${selected || menuSelected ? "block" : "hidden md:block"}`}>
+        {menuSelected ? (
+          <MenuPanel
+            key={menuSelected.phone}
+            contact={menuSelected}
+            onBack={() => setMenuPhone(null)}
+            onMoved={(id) => {
+              justStarted.current = id;
+              setMenuPhone(null);
+              setTab("queue");
+              setSelectedId(id);
+            }}
+          />
+        ) : selected ? (
           <ChatPanel
             key={selected.id}
             ticket={selected}

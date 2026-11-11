@@ -746,78 +746,64 @@ export async function closeTicket(
   return true;
 }
 
-/** Sem escolha no menu em 1 minuto: o cliente vai sozinho para a Fila. */
-const MENU_TO_QUEUE_MS = 60_000;
-
-async function promoteMenuToQueue(): Promise<number> {
-  const cutoff = Date.now() - MENU_TO_QUEUE_MS;
-  const snap = await db().collection("contacts").where("menu.pendingSince", "<=", cutoff).get();
-  let moved = 0;
-  for (const d of snap.docs) {
-    const ticketId = await db()
-      .runTransaction(async (tx) => {
-        const cs = await tx.get(d.ref);
-        const c = cs.data() as (Contact & { menu?: MenuState; waName?: string }) | undefined;
-        const menu = c?.menu;
-        if (!c || !menu?.pendingSince || menu.pendingSince > cutoff) return null;
-        // já tem atendimento aberto? só limpa o menu
-        if (c.activeTicketId) {
-          const a = await tx.get(ticketRef(c.activeTicketId));
-          if (a.exists && a.data()!.status !== "closed") {
-            tx.update(d.ref, { "menu.pendingSince": null, "menu.pending": [] });
-            return null;
-          }
-        }
-        const counterSnap = await tx.get(db().doc("meta/counters"));
-        const msgs = (menu.pending || []).filter(Boolean);
-        const now = Date.now();
-        const ref = db().collection("tickets").doc();
-        const last = msgs[msgs.length - 1];
-        const tk: Omit<Ticket, "id"> = {
-          protocol: nextProtocol(tx, counterSnap),
-          phone: c.phone,
-          contactName: c.name || c.waName || c.phone,
-          contactPhoto: c.photo ?? null,
-          status: "waiting",
-          assignedTo: null,
-          assignedName: null,
-          createdAt: msgs[0]?.createdAt ?? now,
-          assignedAt: null,
-          lastMessageAt: last?.createdAt ?? now,
-          lastMessagePreview: last ? previewOf(last.type, last.text) : "",
-          lastMessageFromMe: false,
-          awaitingCustomerSince: null,
-          unread: msgs.length,
-        };
-        tx.set(ref, tk);
-        for (const m of msgs) {
-          const { id, ...rest } = m;
-          tx.set(ref.collection("messages").doc(id), { source: "customer", ...rest } satisfies Omit<Message, "id">);
-        }
-        tx.update(d.ref, {
-          activeTicketId: ref.id,
-          lastTicketId: ref.id,
-          "menu.pendingSince": null,
-          "menu.pending": [],
-        });
-        return ref.id;
-      })
-      .catch((e) => {
-        console.error("menu->fila", d.id, e);
-        return null;
-      });
-    if (ticketId) {
-      moved++;
-      await addSystemNote(ticketRef(ticketId), "Cliente não escolheu uma opção do menu — enviado para a fila").catch(() => {});
-      await sendWelcome(ticketId).catch((e) => console.error("welcome", e));
+/**
+ * Cliente que está no menu (ainda sem escolher 1 ou 2): um atendente pode mandá-lo para a Fila.
+ * Leva junto as mensagens que ele já escreveu. Retorna o id do atendimento (novo ou já existente).
+ */
+export async function moveMenuContactToQueue(phone: string, by: StaffUser): Promise<string> {
+  const contactRef = db().doc(`contacts/${safeId(phone)}`);
+  const result = await db().runTransaction(async (tx) => {
+    const cs = await tx.get(contactRef);
+    const c = cs.data() as (Contact & { menu?: MenuState; waName?: string }) | undefined;
+    if (!c) throw new HttpError(404, "Contato não encontrado");
+    // já tem atendimento aberto? só limpa o menu e devolve ele
+    if (c.activeTicketId) {
+      const a = await tx.get(ticketRef(c.activeTicketId));
+      if (a.exists && a.data()!.status !== "closed") {
+        tx.update(contactRef, { "menu.pendingSince": null, "menu.pending": [] });
+        return { id: a.id, created: false };
+      }
     }
+    const menu = c.menu;
+    if (!menu?.pendingSince) throw new HttpError(409, "Este cliente não está mais no menu");
+    const counterSnap = await tx.get(db().doc("meta/counters"));
+    const msgs = (menu.pending || []).filter(Boolean);
+    const now = Date.now();
+    const ref = db().collection("tickets").doc();
+    const last = msgs[msgs.length - 1];
+    const tk: Omit<Ticket, "id"> = {
+      protocol: nextProtocol(tx, counterSnap),
+      phone: c.phone,
+      contactName: c.name || c.waName || c.phone,
+      contactPhoto: c.photo ?? null,
+      status: "waiting",
+      assignedTo: null,
+      assignedName: null,
+      createdAt: msgs[0]?.createdAt ?? now,
+      assignedAt: null,
+      lastMessageAt: last?.createdAt ?? now,
+      lastMessagePreview: last ? previewOf(last.type, last.text) : "",
+      lastMessageFromMe: false,
+      awaitingCustomerSince: null,
+      unread: msgs.length,
+    };
+    tx.set(ref, tk);
+    for (const m of msgs) {
+      const { id, ...rest } = m;
+      tx.set(ref.collection("messages").doc(id), { source: "customer", ...rest } satisfies Omit<Message, "id">);
+    }
+    tx.update(contactRef, { activeTicketId: ref.id, lastTicketId: ref.id, "menu.pendingSince": null, "menu.pending": [] });
+    return { id: ref.id, created: true };
+  });
+  if (result.created) {
+    await addSystemNote(ticketRef(result.id), `${by.name} moveu o cliente do menu para a fila`).catch(() => {});
+    await sendWelcome(result.id).catch((e) => console.error("welcome", e));
   }
-  return moved;
+  return result.id;
 }
 
 /** Encerra atendimentos em que o cliente não respondeu dentro do prazo configurado. */
 export async function sweepInactive(): Promise<number> {
-  await promoteMenuToQueue().catch((e) => console.error("promoteMenuToQueue", e));
   const settings = await getSettings();
   const minutes = Math.max(1, Number(settings.autoCloseMinutes) || 10);
   const cutoff = Date.now() - minutes * 60_000;
