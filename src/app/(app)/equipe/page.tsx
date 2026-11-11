@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Loader2, Plus, ShieldCheck, X } from "lucide-react";
+import { KeyRound, Loader2, Plus, ShieldCheck, UserRoundCog, X } from "lucide-react";
 import { api } from "@/lib/client";
 import { useTeam } from "@/lib/hooks";
 import type { Role, StaffUser } from "@/lib/types";
@@ -82,6 +82,7 @@ export default function EquipePage() {
               <label className="label">Perfil</label>
               <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
                 <option value="agent">Atendente</option>
+                <option value="supervisor">Supervisor (atendente + "atender como")</option>
                 <option value="admin">Administrador</option>
               </select>
             </div>
@@ -105,6 +106,11 @@ export default function EquipePage() {
                       <ShieldCheck className="h-3 w-3" /> Admin
                     </span>
                   )}
+                  {u.role === "supervisor" && (
+                    <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                      <UserRoundCog className="h-3 w-3" /> Supervisor
+                    </span>
+                  )}
                   {!u.active && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">Inativo</span>}
                 </div>
                 <div className="truncate text-sm text-slate-500">{u.email}</div>
@@ -118,6 +124,7 @@ export default function EquipePage() {
                   onChange={(e) => patch(u, { role: e.target.value })}
                 >
                   <option value="agent">Atendente</option>
+                  <option value="supervisor">Supervisor</option>
                   <option value="admin">Administrador</option>
                 </select>
                 <button className="btn btn-ghost px-2.5" title="Redefinir senha" onClick={() => resetPassword(u)}>

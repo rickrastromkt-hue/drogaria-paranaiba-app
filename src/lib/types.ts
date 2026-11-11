@@ -1,4 +1,10 @@
-export type Role = "admin" | "agent";
+/** admin = tudo · supervisor = atendente que também pode "atender como" / atribuir · agent = atendente */
+export type Role = "admin" | "supervisor" | "agent";
+
+/** Pode escolher "quem está atendendo" e atribuir atendimentos a outra pessoa. */
+export const canDelegate = (role?: Role | null) => role === "admin" || role === "supervisor";
+
+export const ROLE_LABEL: Record<Role, string> = { admin: "Administrador", supervisor: "Supervisor", agent: "Atendente" };
 
 export interface StaffUser {
   uid: string;

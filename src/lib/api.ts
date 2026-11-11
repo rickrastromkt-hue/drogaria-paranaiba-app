@@ -37,7 +37,8 @@ export async function requireActor(req: Request): Promise<Actor> {
   const real = await requireStaff(req);
   const as = req.headers.get("x-acting-as");
   if (!as || as === real.uid) return { real, agent: real };
-  if (real.role !== "admin") throw new HttpError(403, "Apenas administradores podem atender em nome de outra pessoa");
+  if (real.role !== "admin" && real.role !== "supervisor")
+    throw new HttpError(403, "Apenas administradores e supervisores podem atender em nome de outra pessoa");
   const snap = await adminDb().doc(`users/${as}`).get();
   const data = snap.data() as StaffUser | undefined;
   if (!data || !data.active) throw new HttpError(400, "O atendente escolhido está inativo. Troque em \"Quem está atendendo\".");

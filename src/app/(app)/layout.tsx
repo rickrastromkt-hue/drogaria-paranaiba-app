@@ -98,7 +98,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
       </main>
 
-      <nav className="flex shrink-0 border-t border-slate-200 bg-white md:hidden">
+      <nav className="mobile-nav flex shrink-0 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
         {items.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (

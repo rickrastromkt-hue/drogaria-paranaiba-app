@@ -1,7 +1,7 @@
 import { HttpError, handler, readJson, requireActor } from "@/lib/api";
 import { adminDb } from "@/lib/firebase-admin";
 import { assignTicket } from "@/lib/tickets";
-import type { StaffUser } from "@/lib/types";
+import { canDelegate, type StaffUser } from "@/lib/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -17,7 +17,7 @@ export const POST = handler(async (req: Request, { params }: Ctx) => {
   const by = actor.agent;
   let target: StaffUser = by;
   if (asUid && asUid !== by.uid) {
-    if (actor.real.role !== "admin") throw new HttpError(403, "Apenas administradores podem atribuir a outro atendente");
+    if (!canDelegate(actor.real.role)) throw new HttpError(403, "Apenas administradores e supervisores podem atribuir a outro atendente");
     const data = (await adminDb().doc(`users/${asUid}`).get()).data() as StaffUser | undefined;
     if (!data || !data.active) throw new HttpError(400, "Atendente inválido ou inativo");
     target = { ...data, uid: asUid };

@@ -105,6 +105,14 @@ export default function AtendimentosPage() {
 
   const selected = tickets.find((t) => t.id === selectedId) || null;
 
+  // Celular: com a conversa aberta, esconde a barra de navegação de baixo.
+  useEffect(() => {
+    document.body.dataset.chatOpen = selected ? "1" : "0";
+    return () => {
+      document.body.dataset.chatOpen = "0";
+    };
+  }, [selected]);
+
   // Se o atendimento selecionado for encerrado, sai dele.
   useEffect(() => {
     if (selectedId && !loading && !tickets.some((t) => t.id === selectedId) && justStarted.current !== selectedId) setSelectedId(null);

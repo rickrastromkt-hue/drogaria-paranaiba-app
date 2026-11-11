@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, MonitorSmartphone, UserRoundCog, X } from "lucide-react";
 import { useTeam } from "@/lib/hooks";
+import { ROLE_LABEL, canDelegate } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
 
@@ -58,13 +59,13 @@ export function SidebarIdentity() {
   }, [open]);
   if (!staff) return null;
   const me = acting ?? staff;
-  const isAdmin = staff.role === "admin";
+  const isAdmin = canDelegate(staff.role);
   return (
     <div ref={box} className="relative">
       <button
         disabled={!isAdmin}
         onClick={() => setOpen((v) => !v)}
-        title={isAdmin ? `Atendendo como ${me.name} — clique para trocar` : `${staff.name} (Atendente)`}
+        title={isAdmin ? `Atendendo como ${me.name} — clique para trocar` : `${staff.name} (${ROLE_LABEL[staff.role]})`}
         className="relative rounded-full disabled:cursor-default"
       >
         <Avatar name={me.name} size={36} />
@@ -87,7 +88,7 @@ export function SidebarIdentity() {
 export function ActingBar() {
   const { staff, acting, setActing } = useAuth();
   const [open, setOpen] = useState(false);
-  if (staff?.role !== "admin") return null;
+  if (!canDelegate(staff?.role)) return null;
   return (
     <div className="relative">
       {acting ? (

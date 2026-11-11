@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { ArrowLeft, ArrowRightLeft, BadgeCheck, Camera, CheckCircle2, Mic, Hand, Loader2, Paperclip, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
-import { ImagePlus } from "lucide-react";
+import { ImagePlus, MoreVertical } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { MAX_UPLOAD_BYTES, api, blobToDataUrl, compressImage, duration, formatPhone, useNow } from "@/lib/client";
-import type { Contact, Message, QuickReply, StaffUser, Ticket } from "@/lib/types";
+import { canDelegate, type Contact, type Message, type QuickReply, type StaffUser, type Ticket } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
 import { MessageBubble } from "./MessageBubble";
@@ -44,6 +44,15 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const [error, setError] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
   const [showContact, setShowContact] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const f = () => setNarrow(mq.matches);
+    f();
+    mq.addEventListener("change", f);
+    return () => mq.removeEventListener("change", f);
+  }, []);
   const [recording, setRecording] = useState(false);
   const [pendingPhoto, setPendingPhoto] = useState<{ file: Blob; name: string; preview: string } | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
@@ -104,7 +113,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     }
   }
 
-  const isAdmin = account?.role === "admin";
+  const isAdmin = canDelegate(account?.role); // admin ou supervisor: "Atender como"
   const [asUid, setAsUid] = useState("");
   const assign = () =>
     run("assign", () => api(`/api/tickets/${ticket.id}/assign`, isAdmin && asUid && asUid !== staff?.uid ? { asUid } : {}));
@@ -187,91 +196,142 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     });
   };
 
+  const canTransfer = !readOnly && ticket.status === "open" && (isMine || account?.role === "admin");
+  const canClose = !readOnly && ticket.status !== "closed" && (ticket.status === "waiting" || isMine || account?.role === "admin");
+
   let lastDay = "";
 
   return (
     <div className="relative flex h-full">
-    <div className="flex h-full min-w-0 flex-1 flex-col">
+    <div className="relative flex h-full min-w-0 flex-1 flex-col">
       {/* Cabeçalho */}
-      <header className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-4 py-3">
+      <header className="flex items-center gap-2.5 border-b border-slate-200/70 bg-white px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
         {onBack && (
-          <button onClick={onBack} className="-ml-1 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:hidden">
+          <button onClick={onBack} className="-ml-1 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:hidden" title="Voltar">
             <ArrowLeft className="h-5 w-5" />
           </button>
         )}
-        <Avatar name={ticket.contactName} photo={ticket.contactPhoto} />
+        <button onClick={() => setShowContact((v) => !v)} className="shrink-0 rounded-full" title="Dados do contato">
+          <Avatar name={ticket.contactName} photo={ticket.contactPhoto} size={40} />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate font-semibold text-slate-800">{ticket.contactName}</span>
             {contact?.saved && <BadgeCheck className="h-4 w-4 shrink-0 text-brand-600" aria-label="Contato salvo" />}
           </div>
-          <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-            <span>{formatPhone(ticket.phone)}</span>
-            <span>·</span>
-            <span>Protocolo {ticket.protocol}</span>
+          <div className="flex items-center gap-x-2 overflow-hidden whitespace-nowrap text-xs text-slate-500">
+            <span className="hidden sm:inline">{formatPhone(ticket.phone)}</span>
+            <span className="hidden sm:inline">·</span>
+            <span className="truncate">
+              <span className="sm:hidden">#</span>
+              <span className="hidden sm:inline">Protocolo </span>
+              {ticket.protocol}
+            </span>
             {ticket.assignedName && (
-              <>
-                <span>·</span>
-                <span>Com {ticket.assignedName}</span>
-              </>
+              <span className="hidden truncate md:inline">· Com {ticket.assignedName}</span>
+            )}
+            {remaining != null && (
+              <span
+                title="Encerra automaticamente se o cliente não responder"
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
+                  remaining < 120_000 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                <Timer className="h-3 w-3" /> {duration(remaining)}
+              </span>
             )}
           </div>
         </div>
 
-        {remaining != null && (
-          <div
-            title="Encerra automaticamente se o cliente não responder"
-            className={`hidden items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium sm:flex ${
-              remaining < 120_000 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
-            }`}
+        {/* Computador / tablet: botões visíveis */}
+        <div className="hidden items-center gap-1.5 sm:flex">
+          {account?.role === "admin" && (
+            <button onClick={remove} disabled={!!busy} className="btn btn-ghost px-2.5 hover:bg-accent-50 hover:text-accent-600" title="Excluir atendimento">
+              {busy === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </button>
+          )}
+          <button
+            onClick={() => setShowContact((v) => !v)}
+            className={`btn px-2.5 ${showContact ? "bg-brand-50 text-brand-700" : "btn-ghost"}`}
+            title={contact?.saved ? "Dados do contato" : "Salvar contato"}
           >
-            <Timer className="h-3.5 w-3.5" /> {duration(remaining)}
-          </div>
-        )}
+            <UserRound className="h-4 w-4" />
+            <span className="hidden lg:inline">{contact?.saved ? "Contato" : "Salvar contato"}</span>
+          </button>
+          {canTransfer && (
+            <button onClick={() => setShowTransfer((v) => !v)} className="btn btn-ghost px-2.5" title="Transferir">
+              <ArrowRightLeft className="h-4 w-4" />
+              <span className="hidden lg:inline">Transferir</span>
+            </button>
+          )}
+        </div>
 
-        {account?.role === "admin" && (
-          <button onClick={remove} disabled={!!busy} className="btn btn-ghost px-2.5 hover:bg-accent-50 hover:text-accent-600" title="Excluir atendimento">
-            {busy === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        {canClose && (
+          <button onClick={close} disabled={!!busy} className="btn btn-danger px-2.5" title="Encerrar">
+            {busy === "close" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            <span className="hidden lg:inline">Encerrar</span>
           </button>
         )}
 
-        <button
-          onClick={() => setShowContact((v) => !v)}
-          className={`btn px-2.5 ${showContact ? "bg-brand-50 text-brand-700" : "btn-ghost"}`}
-          title={contact?.saved ? "Dados do contato" : "Salvar contato"}
-        >
-          <UserRound className="h-4 w-4" />
-          <span className="hidden lg:inline">{contact?.saved ? "Contato" : "Salvar contato"}</span>
-        </button>
-
-        {!readOnly && ticket.status !== "closed" && (
-          <div className="flex items-center gap-1.5">
-            {ticket.status === "open" && (isMine || account?.role === "admin") && (
-              <div className="relative">
-                <button onClick={() => setShowTransfer((v) => !v)} className="btn btn-ghost px-2.5" title="Transferir">
-                  <ArrowRightLeft className="h-4 w-4" />
-                  <span className="hidden lg:inline">Transferir</span>
+        {/* Celular: demais ações no menu ⋯ */}
+        <div className="relative sm:hidden">
+          <button onClick={() => setShowMore((v) => !v)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="Mais opções">
+            <MoreVertical className="h-5 w-5" />
+          </button>
+          {showMore && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setShowMore(false)} />
+              <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                <button
+                  onClick={() => {
+                    setShowMore(false);
+                    setShowContact(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                >
+                  <UserRound className="h-4 w-4 text-slate-400" /> {contact?.saved ? "Dados do contato" : "Salvar contato"}
                 </button>
-                {showTransfer && (
-                  <div className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-                    <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">Transferir para</div>
-                    {team.filter((u) => u.active && u.uid !== ticket.assignedTo).map((u) => (
-                      <button key={u.uid} onClick={() => transfer(u.uid)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50">
-                        <Avatar name={u.name} size={24} /> {u.name}
-                      </button>
-                    ))}
-                  </div>
+                {canTransfer && (
+                  <button
+                    onClick={() => {
+                      setShowMore(false);
+                      setShowTransfer(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                  >
+                    <ArrowRightLeft className="h-4 w-4 text-slate-400" /> Transferir
+                  </button>
+                )}
+                {account?.role === "admin" && (
+                  <button
+                    onClick={() => {
+                      setShowMore(false);
+                      remove();
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-accent-600 hover:bg-accent-50"
+                  >
+                    <Trash2 className="h-4 w-4" /> Excluir atendimento
+                  </button>
                 )}
               </div>
-            )}
-            {(ticket.status === "waiting" || isMine || account?.role === "admin") && (
-              <button onClick={close} disabled={!!busy} className="btn btn-danger px-2.5" title="Encerrar">
-                {busy === "close" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                <span className="hidden lg:inline">Encerrar</span>
-              </button>
-            )}
-          </div>
+            </>
+          )}
+        </div>
+
+        {showTransfer && (
+          <>
+            <div className="fixed inset-0 z-20" onClick={() => setShowTransfer(false)} />
+            <div className="absolute right-3 top-14 z-30 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+              <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">Transferir para</div>
+              {team.filter((u) => u.active && u.uid !== ticket.assignedTo).map((u) => (
+                <button key={u.uid} onClick={() => transfer(u.uid)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-slate-50">
+                  <Avatar name={u.name} size={24} /> {u.name}
+                </button>
+              ))}
+            </div>
+          </>
         )}
+
         {onClose && (
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" title="Fechar">
             <X className="h-5 w-5" />
@@ -280,7 +340,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       </header>
 
       {/* Mensagens */}
-      <div className="chat-bg min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-4 sm:px-8">
+      <div className="chat-bg min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-3 sm:px-8 sm:py-4">
         {loadingMsgs && (
           <div className="flex justify-center py-10">
             <Loader2 className="h-5 w-5 animate-spin text-brand-600" />
@@ -308,12 +368,12 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       {error && <div className="border-t border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-600">{error}</div>}
 
       {readOnly || ticket.status === "closed" ? (
-        <div className="border-t border-slate-200/70 bg-white px-4 py-3 text-center text-sm text-slate-500">
+        <div className="border-t border-slate-200/70 bg-white px-4 pt-3 pb-safe text-center text-sm text-slate-500">
           Atendimento encerrado
           {ticket.closedBy === "inactivity" ? " por ausência do cliente" : ticket.closedBy === "finance" ? " — cliente enviado ao Financeiro" : ticket.closedByName ? ` por ${ticket.closedByName}` : ""}.
         </div>
       ) : ticket.status === "waiting" ? (
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 pt-3 pb-safe">
           <span className="text-sm text-slate-500">Cliente aguardando na fila</span>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {isAdmin && (
@@ -337,11 +397,11 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
           </div>
         </div>
       ) : !canAct ? (
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-500">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 pt-3 pb-safe text-sm text-slate-500">
           Em atendimento com {ticket.assignedName}.
         </div>
       ) : (
-        <div className="relative border-t border-slate-200/70 bg-white px-3 py-3">
+        <div className="pb-safe relative border-t border-slate-200/70 bg-white px-2 pt-2 sm:px-3 sm:pt-3">
           {qrMatches.length > 0 && (
             <div className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
               {qrMatches.map((q) => (
@@ -377,11 +437,11 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
           {recording ? (
             <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} onError={setError} />
           ) : (
-          <div className="flex items-end gap-1.5">
-            <button onClick={() => fileInput.current?.click()} disabled={!!busy} className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" title="Enviar arquivo">
+          <div className="flex items-end gap-1 sm:gap-1.5">
+            <button onClick={() => fileInput.current?.click()} disabled={!!busy} className="shrink-0 rounded-xl p-2 text-slate-500 hover:bg-slate-100 sm:p-2.5" title="Enviar arquivo">
               <Paperclip className="h-5 w-5" />
             </button>
-            <button onClick={() => photoInput.current?.click()} disabled={!!busy} className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" title="Foto: tirar ou escolher">
+            <button onClick={() => photoInput.current?.click()} disabled={!!busy} className="shrink-0 rounded-xl p-2 text-slate-500 hover:bg-slate-100 sm:p-2.5" title="Foto: tirar ou escolher">
               <Camera className="h-5 w-5" />
             </button>
             <input
@@ -408,7 +468,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
                   else send();
                 }
               }}
-              placeholder={pendingPhoto ? "Legenda da foto (opcional)" : "Digite uma mensagem…  ( / para respostas rápidas )"}
+              placeholder={pendingPhoto ? (narrow ? "Legenda (opcional)" : "Legenda da foto (opcional)") : narrow ? "Mensagem" : "Mensagem  ( / = respostas rápidas )"}
               className="input max-h-40 min-h-[42px] resize-none py-2.5"
               style={{ fieldSizing: "content" } as React.CSSProperties}
             />
@@ -437,7 +497,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     </div>
 
     {showContact && (
-      <aside className="absolute inset-y-0 right-0 z-30 flex w-full max-w-[320px] flex-col border-l border-slate-200/70 bg-white shadow-xl xl:static xl:shadow-none">
+      <aside className="absolute inset-y-0 right-0 z-30 flex w-full flex-col sm:max-w-[320px] border-l border-slate-200/70 bg-white shadow-xl xl:static xl:shadow-none">
         <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3.5">
           <div>
             <div className="font-semibold text-slate-800">{contact?.saved ? "Dados do contato" : "Salvar contato"}</div>

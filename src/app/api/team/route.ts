@@ -9,7 +9,7 @@ export const POST = handler(async (req: Request) => {
   const b = await readJson<Body>(req);
   const name = (b.name || "").trim();
   const email = (b.email || "").trim().toLowerCase();
-  const role: Role = b.role === "admin" ? "admin" : "agent";
+  const role: Role = b.role === "admin" || b.role === "supervisor" ? b.role : "agent";
   if (!name || !email) throw new HttpError(400, "Informe nome e e-mail");
   if (!b.password || b.password.length < 6) throw new HttpError(400, "A senha precisa ter ao menos 6 caracteres");
 

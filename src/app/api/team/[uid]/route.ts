@@ -9,7 +9,7 @@ export const PATCH = handler(async (req: Request, { params }: Ctx) => {
   const me = await requireStaff(req, { admin: true });
   const { uid } = await params;
   const b = await readJson<Body>(req);
-  if (uid === me.uid && (b.active === false || b.role === "agent"))
+  if (uid === me.uid && (b.active === false || (b.role && b.role !== "admin")))
     throw new HttpError(400, "Você não pode remover seu próprio acesso de administrador");
 
   const update: Record<string, unknown> = {};
@@ -18,7 +18,7 @@ export const PATCH = handler(async (req: Request, { params }: Ctx) => {
     update.name = b.name.trim();
     authUpdate.displayName = b.name.trim();
   }
-  if (b.role === "admin" || b.role === "agent") update.role = b.role;
+  if (b.role === "admin" || b.role === "supervisor" || b.role === "agent") update.role = b.role;
   if (typeof b.active === "boolean") {
     update.active = b.active;
     authUpdate.disabled = !b.active;

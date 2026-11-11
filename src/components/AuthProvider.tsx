@@ -5,7 +5,7 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { setActingHeader } from "@/lib/client";
-import type { StaffUser } from "@/lib/types";
+import { canDelegate, type StaffUser } from "@/lib/types";
 
 type Ctx = {
   user: User | null;
@@ -25,7 +25,7 @@ const ACTING_KEY = "acting-as-uid";
 // Variáveis NEXT_PUBLIC_* são gravadas no build: se faltarem, é preciso fazer um novo deploy.
 const CONFIGURED = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
-const AuthContext = createContext<Ctx>({
+export const AuthContext = createContext<Ctx>({
   user: null,
   staff: null,
   acting: null,
@@ -48,8 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  // Só administradores podem atender em nome de outra pessoa.
-  const effectiveUid = staff?.role === "admin" && actingUid && actingUid !== staff.uid ? actingUid : null;
+  // Só administradores e supervisores podem atender em nome de outra pessoa.
+  const effectiveUid = canDelegate(staff?.role) && actingUid && actingUid !== staff?.uid ? actingUid : null;
 
   useEffect(() => {
     setActingHeader(effectiveUid);
