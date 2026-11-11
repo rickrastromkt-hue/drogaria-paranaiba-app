@@ -56,7 +56,7 @@ export function MessageBubble({ m }: { m: Message }) {
     ) : m.source === "phone" ? (
       <span className="flex items-center gap-1"><Smartphone className="h-3 w-3" /> Pelo celular</span>
     ) : m.source === "agent" && m.agentName ? (
-      <span className="flex items-center gap-1"><User className="h-3 w-3" /> {m.agentName}</span>
+      <span className="flex items-center gap-1"><User className="h-3 w-3" /> {m.agentName}{m.signedAs && m.signedAs !== m.agentName ? ` (como ${m.signedAs})` : ""}</span>
     ) : null;
 
   return (

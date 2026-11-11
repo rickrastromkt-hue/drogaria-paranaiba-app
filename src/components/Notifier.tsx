@@ -104,17 +104,18 @@ export function Notifier({ staff, onWaitingCount }: { staff: StaffUser; onWaitin
     });
   }, [notify, onWaitingCount]);
 
-  // Meus atendimentos: nova mensagem do cliente.
+  // Meus atendimentos (inclusive "atendendo como"): nova mensagem do cliente.
   const mineSeen = useRef<Map<string, number> | null>(null);
   useEffect(() => {
     mineSeen.current = null;
-    const q = query(collection(db(), "tickets"), where("assignedTo", "==", staff.uid));
+    // Atendimentos abertos em que sou responsável ou participante.
+    const q = query(collection(db(), "tickets"), where("status", "==", "open"));
     return onSnapshot(q, (snap) => {
       const map = new Map<string, number>();
       let ev: Ticket | null = null;
       for (const d of snap.docs) {
         const t = { ...(d.data() as Ticket), id: d.id };
-        if (t.status !== "open") continue;
+        if (t.assignedTo !== staff.uid && !t.participants?.includes(staff.uid)) continue;
         map.set(d.id, t.lastMessageAt);
         const before = mineSeen.current?.get(d.id);
         if (before !== undefined && t.lastMessageAt > before && !t.lastMessageFromMe) ev = t;

@@ -22,6 +22,8 @@ export interface Ticket {
   status: TicketStatus;
   assignedTo: string | null;
   assignedName: string | null;
+  /** Quem também acompanha o atendimento (ex.: admin que atende "como" outro atendente). */
+  participants?: string[];
   createdAt: number;
   assignedAt: number | null;
   closedAt?: number | null;
@@ -62,6 +64,8 @@ export interface Message {
   mimeType?: string | null;
   agentUid?: string | null;
   agentName?: string | null;
+  /** Nome que o cliente viu na assinatura, quando diferente de quem enviou. */
+  signedAs?: string | null;
   status?: MessageStatus | null;
   createdAt: number;
 }

@@ -17,6 +17,8 @@ type Tab = "mine" | "queue" | "team";
 
 export default function AtendimentosPage() {
   const { staff } = useAuth();
+  // "Meu" = sou o responsável ou participo (admin atendendo como outro atendente).
+  const isMineT = (t: Ticket) => t.assignedTo === staff?.uid || !!(staff?.uid && t.participants?.includes(staff.uid));
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab | null>(null);
@@ -67,10 +69,10 @@ export default function AtendimentosPage() {
   const groups = useMemo(() => {
     const byRecent = (a: Ticket, b: Ticket) => b.lastMessageAt - a.lastMessageAt;
     return {
-      mine: tickets.filter((t) => t.status === "open" && t.assignedTo === staff?.uid).sort(byRecent),
+      mine: tickets.filter((t) => t.status === "open" && isMineT(t)).sort(byRecent),
       // fila: quem chegou primeiro aparece primeiro
       queue: tickets.filter((t) => t.status === "waiting").sort((a, b) => a.createdAt - b.createdAt),
-      team: tickets.filter((t) => t.status === "open" && t.assignedTo !== staff?.uid).sort(byRecent),
+      team: tickets.filter((t) => t.status === "open" && !isMineT(t)).sort(byRecent),
     };
   }, [tickets, staff?.uid]);
 
@@ -86,7 +88,7 @@ export default function AtendimentosPage() {
     const tk = tickets.find((x) => x.id === id);
     openFromLink.current = null;
     if (!tk) return;
-    setTab(tk.status === "waiting" ? "queue" : tk.assignedTo === staff?.uid ? "mine" : "team");
+    setTab(tk.status === "waiting" ? "queue" : isMineT(tk) ? "mine" : "team");
   }, [loading, tickets, staff?.uid]);
 
 
@@ -114,7 +116,7 @@ export default function AtendimentosPage() {
   const prevAssign = useRef<{ id: string | null; to: string | null }>({ id: null, to: null });
   useEffect(() => {
     const prev = prevAssign.current;
-    const to = selected?.assignedTo ?? null;
+    const to = selected && isMineT(selected) ? staff?.uid ?? null : selected?.assignedTo ?? null;
     if (selected && prev.id === selected.id && prev.to !== staff?.uid && to === staff?.uid) setTab("mine");
     prevAssign.current = { id: selected?.id ?? null, to };
   }, [selected, staff?.uid]);
@@ -208,6 +210,9 @@ export default function AtendimentosPage() {
                           )}
                         </div>
                         {tab === "team" && t.assignedName && <div className="mt-0.5 text-[11px] text-slate-400">com {t.assignedName}</div>}
+                        {tab === "mine" && t.assignedTo !== staff?.uid && t.assignedName && (
+                          <div className="mt-0.5 text-[11px] font-medium text-brand-600">atendendo como {t.assignedName}</div>
+                        )}
                       </div>
                     </button>
                   </li>

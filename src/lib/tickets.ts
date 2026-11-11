@@ -77,7 +77,7 @@ async function deliver(phone: string, msg: Outgoing, signature?: string) {
 export async function sendOutbound(
   ticket: Pick<Ticket, "id" | "phone">,
   msg: Outgoing,
-  opts: { source: "agent" | "bot"; agent?: StaffUser | null; startTimer: boolean; signature?: string }
+  opts: { source: "agent" | "bot"; agent?: StaffUser | null; startTimer: boolean; signature?: string; signedAs?: string | null }
 ) {
   const res = await deliver(ticket.phone, msg, opts.signature);
   const now = Date.now();
@@ -91,6 +91,7 @@ export async function sendOutbound(
     mimeType: msg.mimeType ?? null,
     agentUid: opts.agent?.uid ?? null,
     agentName: opts.agent?.name ?? null,
+    signedAs: opts.signedAs ?? null,
     status: "sent",
     createdAt: now,
   };
@@ -550,6 +551,8 @@ export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser)
       status: "open",
       assignedTo: agent.uid,
       assignedName: agent.name,
+      // admin que atende "como" outro atendente continua no atendimento (aparece em Meus para os dois)
+      participants: by && by.uid !== agent.uid ? [by.uid] : [],
       assignedAt: Date.now(),
       awaitingCustomerSince: null,
     });
@@ -573,8 +576,12 @@ export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser)
   return { ok: true };
 }
 
+function isParticipant(t: Ticket, user: StaffUser) {
+  return t.assignedTo === user.uid || !!t.participants?.includes(user.uid);
+}
+
 function canAct(t: Ticket, user: StaffUser) {
-  return t.assignedTo === user.uid || user.role === "admin";
+  return isParticipant(t, user) || user.role === "admin";
 }
 
 export async function agentSend(id: string, user: StaffUser, msg: Outgoing) {
@@ -584,11 +591,15 @@ export async function agentSend(id: string, user: StaffUser, msg: Outgoing) {
   if (msg.type !== "text" && !msg.mediaUrl) throw new HttpError(400, "Arquivo ausente");
   if (msg.type === "text" && !msg.text.trim()) throw new HttpError(400, "Mensagem vazia");
   const settings = await getSettings();
+  // Participante que atende "como" o responsável: o cliente vê o nome do responsável.
+  const onBehalf = t.assignedTo !== user.uid && !!t.participants?.includes(user.uid) && !!t.assignedName;
+  const shownName = onBehalf ? t.assignedName! : user.name;
   return sendOutbound(t, msg, {
     source: "agent",
     agent: user,
     startTimer: true,
-    signature: settings.signMessages ? user.name : undefined,
+    signature: settings.signMessages ? shownName : undefined,
+    signedAs: onBehalf ? shownName : null,
   });
 }
 
@@ -602,6 +613,7 @@ export async function transferTicket(id: string, user: StaffUser, toUid: string)
     status: "open",
     assignedTo: toUid,
     assignedName: to.name,
+    participants: [],
     assignedAt: Date.now(),
   });
   await addSystemNote(ticketRef(id), `${user.name} transferiu o atendimento para ${to.name}`);

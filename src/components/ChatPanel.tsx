@@ -49,7 +49,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const textarea = useRef<HTMLTextAreaElement>(null);
   const now = useNow(1000);
 
-  const isMine = ticket.assignedTo === staff?.uid;
+  const isMine = ticket.assignedTo === staff?.uid || !!(staff?.uid && ticket.participants?.includes(staff.uid));
   const canAct = !readOnly && ticket.status === "open" && (isMine || staff?.role === "admin");
 
   useEffect(() => {
