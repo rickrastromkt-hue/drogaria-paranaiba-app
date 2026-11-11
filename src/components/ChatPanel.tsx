@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
-import { ArrowLeft, ArrowRightLeft, BadgeCheck, CheckCircle2, Hand, Loader2, Paperclip, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, BadgeCheck, Camera, CheckCircle2, Mic, Hand, Loader2, Paperclip, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
 import { db, storage } from "@/lib/firebase";
 import { api, duration, formatPhone, useNow } from "@/lib/client";
 import type { Contact, Message, QuickReply, StaffUser, Ticket } from "@/lib/types";
@@ -11,6 +11,8 @@ import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
 import { MessageBubble } from "./MessageBubble";
 import { ContactForm } from "./ContactForm";
+import { VoiceRecorder } from "./VoiceRecorder";
+import { CameraCapture } from "./CameraCapture";
 
 type Props = {
   ticket: Ticket;
@@ -43,6 +45,8 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const [error, setError] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
   const [showContact, setShowContact] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const [contact, setContact] = useState<Contact | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -123,33 +127,42 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     });
   }
 
+  /** Sobe o arquivo no Storage e envia pelo WhatsApp. */
+  async function uploadAndSend(file: Blob, fileName: string, caption = "") {
+    if (file.size > 16 * 1024 * 1024) throw new Error("Arquivo maior que 16 MB.");
+    const mime = file.type || "application/octet-stream";
+    const type = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "document";
+    const safeName = fileName.replace(/[^\w.\-]+/g, "_");
+    const r = storageRef(storage(), `uploads/${ticket.id}/${Date.now()}-${safeName}`);
+    await uploadBytes(r, file, { contentType: mime });
+    const url = await getDownloadURL(r);
+    await api(`/api/tickets/${ticket.id}/send`, {
+      type,
+      text: type === "image" || type === "video" ? caption : "",
+      mediaUrl: url,
+      fileName,
+      mimeType: mime,
+    });
+    return type;
+  }
+
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     if (file.size > 16 * 1024 * 1024) return setError("Arquivo maior que 16 MB.");
-    const type = file.type.startsWith("image/")
-      ? "image"
-      : file.type.startsWith("video/")
-        ? "video"
-        : file.type.startsWith("audio/")
-          ? "audio"
-          : "document";
     run("send", async () => {
-      const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-      const r = storageRef(storage(), `uploads/${ticket.id}/${Date.now()}-${safeName}`);
-      await uploadBytes(r, file, { contentType: file.type || undefined });
-      const url = await getDownloadURL(r);
-      await api(`/api/tickets/${ticket.id}/send`, {
-        type,
-        text: type === "image" || type === "video" ? text.trim() : "",
-        mediaUrl: url,
-        fileName: file.name,
-        mimeType: file.type,
-      });
+      const type = await uploadAndSend(file, file.name, text.trim());
       if (type === "image" || type === "video") setText("");
     });
   }
+
+  const sendVoice = (mp3: Blob) => run("send", () => uploadAndSend(mp3, `audio-${Date.now()}.mp3`));
+  const sendPhoto = async (photo: Blob, caption: string) => {
+    setError("");
+    await uploadAndSend(photo, `foto-${Date.now()}.jpg`, caption);
+  };
+
 
   const remove = () => {
     if (!confirm(`Excluir o atendimento ${ticket.protocol} de ${ticket.contactName}?\n\nTodas as mensagens e arquivos serão apagados e isso NÃO pode ser desfeito.`)) return;
@@ -331,9 +344,15 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2">
+          {recording ? (
+            <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} onError={setError} />
+          ) : (
+          <div className="flex items-end gap-1.5">
             <button onClick={() => fileInput.current?.click()} disabled={!!busy} className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" title="Enviar arquivo">
               <Paperclip className="h-5 w-5" />
+            </button>
+            <button onClick={() => setShowCamera(true)} disabled={!!busy} className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" title="Tirar foto">
+              <Camera className="h-5 w-5" />
             </button>
             <input ref={fileInput} type="file" hidden onChange={onFile} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt" />
             <textarea
@@ -352,10 +371,26 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
               className="input max-h-40 min-h-[42px] resize-none py-2.5"
               style={{ fieldSizing: "content" } as React.CSSProperties}
             />
-            <button onClick={send} disabled={!!busy || !text.trim()} className="btn btn-primary h-[42px] w-[42px] p-0" title="Enviar">
-              {busy === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
-            </button>
+            {text.trim() || busy === "send" ? (
+              <button onClick={send} disabled={!!busy || !text.trim()} className="btn btn-primary h-[42px] w-[42px] shrink-0 p-0" title="Enviar">
+                {busy === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setError("");
+                  setRecording(true);
+                }}
+                disabled={!!busy}
+                className="btn btn-primary h-[42px] w-[42px] shrink-0 p-0"
+                title="Gravar áudio"
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            )}
           </div>
+          )}
+          {showCamera && <CameraCapture onSend={sendPhoto} onClose={() => setShowCamera(false)} />}
         </div>
       )}
     </div>

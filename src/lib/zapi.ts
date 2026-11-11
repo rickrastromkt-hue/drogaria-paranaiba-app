@@ -41,7 +41,7 @@ export const zapi = {
     call<SendResult>("POST", "/send-image", { phone, image, caption }),
   sendVideo: (phone: string, video: string, caption?: string) =>
     call<SendResult>("POST", "/send-video", { phone, video, caption }),
-  sendAudio: (phone: string, audio: string) => call<SendResult>("POST", "/send-audio", { phone, audio }),
+  sendAudio: (phone: string, audio: string) => call<SendResult>("POST", "/send-audio", { phone, audio, waveform: true }),
   sendDocument: (phone: string, document: string, fileName: string) => {
     const ext = (fileName.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
     return call<SendResult>("POST", `/send-document/${ext}`, { phone, document, fileName });
