@@ -9,7 +9,7 @@ const MAX_SECONDS = 5 * 60;
 /** Converte as amostras gravadas em MP3 (formato aceito em qualquer WhatsApp). */
 async function toMp3(chunks: Float32Array[], sampleRate: number): Promise<Blob> {
   const { Mp3Encoder } = await import("@breezystack/lamejs");
-  const enc = new Mp3Encoder(1, sampleRate, 64);
+  const enc = new Mp3Encoder(1, sampleRate, 48); // voz: 48 kbps (5 min ≈ 1,8 MB)
   const parts: Uint8Array[] = [];
   const FRAME = 1152;
   let pending = new Int16Array(0);

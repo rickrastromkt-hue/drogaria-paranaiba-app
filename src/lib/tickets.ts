@@ -4,6 +4,7 @@ import { adminApp, adminDb } from "./firebase-admin";
 import { HttpError, type Actor } from "./api";
 import { parseContent, previewOf, zapi, type ZapiReceived, type ZapiStatus } from "./zapi";
 import { normalizePhone } from "./br";
+import { saveMedia } from "./mediaStore";
 import { mergeBranding, type Branding } from "./branding";
 import {
   DEFAULT_SETTINGS,
@@ -47,6 +48,7 @@ export async function getSettings(): Promise<Settings> {
 type Outgoing = {
   type: MessageType;
   text: string;
+  /** Link público OU data URL base64 (data:image/jpeg;base64,...). */
   mediaUrl?: string | null;
   fileName?: string | null;
   mimeType?: string | null;
@@ -82,11 +84,19 @@ export async function sendOutbound(
   const res = await deliver(ticket.phone, msg, opts.signature);
   const now = Date.now();
   const id = safeId(res.messageId || res.id || `${now}`);
+  // Base64: guarda uma cópia no Firestore e usa um link assinado para exibir no chat.
+  let mediaUrl = msg.mediaUrl ?? null;
+  if (mediaUrl?.startsWith("data:")) {
+    mediaUrl = await saveMedia(ticket.id, id, mediaUrl, msg.fileName).catch((e) => {
+      console.error("saveMedia", e);
+      return null;
+    });
+  }
   const doc: Omit<Message, "id"> = {
     source: opts.source,
     type: msg.type,
     text: msg.text,
-    mediaUrl: msg.mediaUrl ?? null,
+    mediaUrl,
     fileName: msg.fileName ?? null,
     mimeType: msg.mimeType ?? null,
     agentUid: opts.agent?.uid ?? null,

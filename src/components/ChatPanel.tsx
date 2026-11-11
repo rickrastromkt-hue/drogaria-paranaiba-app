@@ -2,17 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { ArrowLeft, ArrowRightLeft, BadgeCheck, Camera, CheckCircle2, Mic, Hand, Loader2, Paperclip, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
-import { db, storage } from "@/lib/firebase";
-import { api, duration, formatPhone, useNow } from "@/lib/client";
+import { ImagePlus } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { MAX_UPLOAD_BYTES, api, blobToDataUrl, compressImage, duration, formatPhone, useNow } from "@/lib/client";
 import type { Contact, Message, QuickReply, StaffUser, Ticket } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
 import { MessageBubble } from "./MessageBubble";
 import { ContactForm } from "./ContactForm";
 import { VoiceRecorder } from "./VoiceRecorder";
-import { CameraCapture } from "./CameraCapture";
 
 type Props = {
   ticket: Ticket;
@@ -46,7 +45,8 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const [showTransfer, setShowTransfer] = useState(false);
   const [showContact, setShowContact] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: Blob; name: string; preview: string } | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -119,7 +119,18 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
 
   function send() {
     const t = text.trim();
-    if (!t || busy) return;
+    if (busy) return;
+    if (pendingPhoto) {
+      const p = pendingPhoto;
+      run("send", async () => {
+        await uploadAndSend(p.file, p.name, t);
+        clearPhoto();
+        setText("");
+        textarea.current?.focus();
+      });
+      return;
+    }
+    if (!t) return;
     run("send", async () => {
       await api(`/api/tickets/${ticket.id}/send`, { type: "text", text: t });
       setText("");
@@ -127,41 +138,45 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     });
   }
 
-  /** Sobe o arquivo no Storage e envia pelo WhatsApp. */
+  /** Envia o arquivo em base64 direto para o WhatsApp (sem Firebase Storage). */
   async function uploadAndSend(file: Blob, fileName: string, caption = "") {
-    if (file.size > 16 * 1024 * 1024) throw new Error("Arquivo maior que 16 MB.");
     const mime = file.type || "application/octet-stream";
     const type = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "document";
-    const safeName = fileName.replace(/[^\w.\-]+/g, "_");
-    const r = storageRef(storage(), `uploads/${ticket.id}/${Date.now()}-${safeName}`);
-    await uploadBytes(r, file, { contentType: mime });
-    const url = await getDownloadURL(r);
+    const body = type === "image" ? await compressImage(file) : file;
+    if (body.size > MAX_UPLOAD_BYTES) throw new Error("Arquivo grande demais (máx. 3 MB).");
+    const dataUrl = await blobToDataUrl(body);
     await api(`/api/tickets/${ticket.id}/send`, {
       type,
       text: type === "image" || type === "video" ? caption : "",
-      mediaUrl: url,
-      fileName,
-      mimeType: mime,
+      mediaUrl: dataUrl,
+      fileName: type === "image" && body !== file ? fileName.replace(/\.\w+$/, "") + ".jpg" : fileName,
+      mimeType: body.type || mime,
     });
     return type;
+  }
+
+  function pickPhoto(file: File) {
+    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.preview);
+    setPendingPhoto({ file, name: file.name || `foto-${Date.now()}.jpg`, preview: URL.createObjectURL(file) });
+    setError("");
+    setTimeout(() => textarea.current?.focus(), 30);
+  }
+
+  function clearPhoto() {
+    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.preview);
+    setPendingPhoto(null);
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (file.size > 16 * 1024 * 1024) return setError("Arquivo maior que 16 MB.");
-    run("send", async () => {
-      const type = await uploadAndSend(file, file.name, text.trim());
-      if (type === "image" || type === "video") setText("");
-    });
+    if (file.type.startsWith("image/")) return pickPhoto(file); // fotos: mostra a prévia antes de enviar
+    if (file.size > MAX_UPLOAD_BYTES) return setError("Arquivo grande demais (máx. 3 MB).");
+    run("send", () => uploadAndSend(file, file.name));
   }
 
   const sendVoice = (mp3: Blob) => run("send", () => uploadAndSend(mp3, `audio-${Date.now()}.mp3`));
-  const sendPhoto = async (photo: Blob, caption: string) => {
-    setError("");
-    await uploadAndSend(photo, `foto-${Date.now()}.jpg`, caption);
-  };
 
 
   const remove = () => {
@@ -344,6 +359,21 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
               ))}
             </div>
           )}
+          {pendingPhoto && !recording && (
+            <div className="mb-2 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={pendingPhoto.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+              <div className="min-w-0 flex-1 text-sm">
+                <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                  <ImagePlus className="h-4 w-4 text-brand-600" /> Foto pronta para enviar
+                </div>
+                <div className="text-xs text-slate-400">Escreva uma legenda (opcional) e toque em enviar.</div>
+              </div>
+              <button onClick={clearPhoto} disabled={busy === "send"} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-accent-600" title="Remover">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           {recording ? (
             <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} onError={setError} />
           ) : (
@@ -351,9 +381,20 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
             <button onClick={() => fileInput.current?.click()} disabled={!!busy} className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" title="Enviar arquivo">
               <Paperclip className="h-5 w-5" />
             </button>
-            <button onClick={() => setShowCamera(true)} disabled={!!busy} className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" title="Tirar foto">
+            <button onClick={() => photoInput.current?.click()} disabled={!!busy} className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" title="Foto: tirar ou escolher">
               <Camera className="h-5 w-5" />
             </button>
+            <input
+              ref={photoInput}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) pickPhoto(f);
+              }}
+            />
             <input ref={fileInput} type="file" hidden onChange={onFile} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt" />
             <textarea
               ref={textarea}
@@ -367,12 +408,12 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
                   else send();
                 }
               }}
-              placeholder="Digite uma mensagem…  ( / para respostas rápidas )"
+              placeholder={pendingPhoto ? "Legenda da foto (opcional)" : "Digite uma mensagem…  ( / para respostas rápidas )"}
               className="input max-h-40 min-h-[42px] resize-none py-2.5"
               style={{ fieldSizing: "content" } as React.CSSProperties}
             />
-            {text.trim() || busy === "send" ? (
-              <button onClick={send} disabled={!!busy || !text.trim()} className="btn btn-primary h-[42px] w-[42px] shrink-0 p-0" title="Enviar">
+            {text.trim() || pendingPhoto || busy === "send" ? (
+              <button onClick={send} disabled={!!busy || (!text.trim() && !pendingPhoto)} className="btn btn-primary h-[42px] w-[42px] shrink-0 p-0" title="Enviar">
                 {busy === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
               </button>
             ) : (
@@ -390,7 +431,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
             )}
           </div>
           )}
-          {showCamera && <CameraCapture onSend={sendPhoto} onClose={() => setShowCamera(false)} />}
+
         </div>
       )}
     </div>
