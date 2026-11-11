@@ -39,6 +39,11 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
+  // Service worker em todas as páginas (inclusive login): app instalável e notificações.
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     try {
       const c = JSON.parse(localStorage.getItem(BRANDING_CACHE_KEY) || "null");
