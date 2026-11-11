@@ -43,8 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [acting, setActingUser] = useState<StaffUser | null>(null);
 
   useEffect(() => {
+    // A escolha agora é feita a cada atendimento ("Quem vai atender?"); limpa o modo antigo.
     try {
-      setActingUid(localStorage.getItem(ACTING_KEY));
+      localStorage.removeItem(ACTING_KEY);
     } catch {}
   }, []);
 

@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
-import { ArrowLeft, ArrowRightLeft, BadgeCheck, Camera, CheckCircle2, Mic, Hand, Loader2, Paperclip, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
-import { ImagePlus, MoreVertical } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, BadgeCheck, Camera, CheckCircle2, Mic, Hand, Loader2, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { MAX_UPLOAD_BYTES, api, blobToDataUrl, duration, formatPhone, useNow } from "@/lib/client";
@@ -13,6 +13,7 @@ import { Avatar } from "./Avatar";
 import { MessageBubble } from "./MessageBubble";
 import { ContactForm } from "./ContactForm";
 import { VoiceRecorder } from "./VoiceRecorder";
+import { AssignModal } from "./AssignModal";
 
 type Props = {
   ticket: Ticket;
@@ -45,7 +46,6 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const [error, setError] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
   const [showContact, setShowContact] = useState(false);
-  const [showMore, setShowMore] = useState(false);
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -59,7 +59,6 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const photoInput = useRef<HTMLInputElement>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const now = useNow(1000);
 
@@ -115,9 +114,13 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   }
 
   const isAdmin = canDelegate(account?.role); // admin ou supervisor: "Atender como"
-  const [asUid, setAsUid] = useState("");
-  const assign = () =>
-    run("assign", () => api(`/api/tickets/${ticket.id}/assign`, isAdmin && asUid && asUid !== staff?.uid ? { asUid } : {}));
+  const [askAssign, setAskAssign] = useState(false);
+  // Admin/supervisor: abre "Quem vai atender?". Atendente: pega direto.
+  const assign = () => (isAdmin ? setAskAssign(true) : run("assign", () => api(`/api/tickets/${ticket.id}/assign`, {})));
+  const assignTo = async (uid: string) => {
+    await api(`/api/tickets/${ticket.id}/assign`, uid !== staff?.uid ? { asUid: uid } : {});
+    setAskAssign(false);
+  };
   const close = () => {
     if (!confirm("Encerrar este atendimento? O cliente receberá a mensagem de encerramento.")) return;
     run("close", () => api(`/api/tickets/${ticket.id}/close`));
@@ -237,20 +240,14 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
             {contact?.saved && <BadgeCheck className="h-4 w-4 shrink-0 text-brand-600" aria-label="Contato salvo" />}
           </div>
           <div className="flex items-center gap-x-2 overflow-hidden whitespace-nowrap text-xs text-slate-500">
-            <span className="hidden sm:inline">{formatPhone(ticket.phone)}</span>
+            <span>{formatPhone(ticket.phone)}</span>
             <span className="hidden sm:inline">·</span>
-            <span className="truncate">
-              <span className="sm:hidden">#</span>
-              <span className="hidden sm:inline">Protocolo </span>
-              {ticket.protocol}
-            </span>
-            {ticket.assignedName && (
-              <span className="hidden truncate md:inline">· Com {ticket.assignedName}</span>
-            )}
+            <span className="hidden truncate sm:inline">Protocolo {ticket.protocol}</span>
+            {ticket.assignedName && <span className="hidden truncate md:inline">· Com {ticket.assignedName}</span>}
             {remaining != null && (
               <span
                 title="Encerra automaticamente se o cliente não responder"
-                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
+                className={`hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium sm:inline-flex ${
                   remaining < 120_000 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
                 }`}
               >
@@ -260,80 +257,35 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
           </div>
         </div>
 
-        {/* Computador / tablet: botões visíveis */}
-        <div className="hidden items-center gap-1.5 sm:flex">
+        {/* Ações: só ícones no celular, com texto em telas grandes */}
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
           {account?.role === "admin" && (
-            <button onClick={remove} disabled={!!busy} className="btn btn-ghost px-2.5 hover:bg-accent-50 hover:text-accent-600" title="Excluir atendimento">
+            <button onClick={remove} disabled={!!busy} className="btn btn-ghost px-2 hover:bg-accent-50 hover:text-accent-600 sm:px-2.5" title="Excluir atendimento">
               {busy === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </button>
           )}
           <button
             onClick={() => setShowContact((v) => !v)}
-            className={`btn px-2.5 ${showContact ? "bg-brand-50 text-brand-700" : "btn-ghost"}`}
+            className={`btn px-2 sm:px-2.5 ${showContact ? "bg-brand-50 text-brand-700" : "btn-ghost"}`}
             title={contact?.saved ? "Dados do contato" : "Salvar contato"}
           >
             <UserRound className="h-4 w-4" />
             <span className="hidden lg:inline">{contact?.saved ? "Contato" : "Salvar contato"}</span>
           </button>
           {canTransfer && (
-            <button onClick={() => setShowTransfer((v) => !v)} className="btn btn-ghost px-2.5" title="Transferir">
+            <button onClick={() => setShowTransfer((v) => !v)} className="btn btn-ghost px-2 sm:px-2.5" title="Transferir">
               <ArrowRightLeft className="h-4 w-4" />
               <span className="hidden lg:inline">Transferir</span>
             </button>
           )}
-        </div>
-
-        {canClose && (
-          <button onClick={close} disabled={!!busy} className="btn btn-danger px-2.5" title="Encerrar">
+          {canClose && (
+          <button onClick={close} disabled={!!busy} className="btn btn-danger px-2 sm:px-2.5" title="Encerrar">
             {busy === "close" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             <span className="hidden lg:inline">Encerrar</span>
           </button>
         )}
-
-        {/* Celular: demais ações no menu ⋯ */}
-        <div className="relative sm:hidden">
-          <button onClick={() => setShowMore((v) => !v)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="Mais opções">
-            <MoreVertical className="h-5 w-5" />
-          </button>
-          {showMore && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setShowMore(false)} />
-              <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-                <button
-                  onClick={() => {
-                    setShowMore(false);
-                    setShowContact(true);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
-                >
-                  <UserRound className="h-4 w-4 text-slate-400" /> {contact?.saved ? "Dados do contato" : "Salvar contato"}
-                </button>
-                {canTransfer && (
-                  <button
-                    onClick={() => {
-                      setShowMore(false);
-                      setShowTransfer(true);
-                    }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-slate-50"
-                  >
-                    <ArrowRightLeft className="h-4 w-4 text-slate-400" /> Transferir
-                  </button>
-                )}
-                {account?.role === "admin" && (
-                  <button
-                    onClick={() => {
-                      setShowMore(false);
-                      remove();
-                    }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-accent-600 hover:bg-accent-50"
-                  >
-                    <Trash2 className="h-4 w-4" /> Excluir atendimento
-                  </button>
-                )}
-              </div>
-            </>
-          )}
         </div>
+
 
         {showTransfer && (
           <>
@@ -392,26 +344,10 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       ) : ticket.status === "waiting" ? (
         <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 pt-3 pb-safe">
           <span className="text-sm text-slate-500">Cliente aguardando na fila</span>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {isAdmin && (
-              <label className="flex items-center gap-2 text-sm text-slate-500">
-                <span className="hidden sm:inline">Atender como</span>
-                <select className="input input-sm w-auto min-w-[150px]" value={asUid || staff?.uid || ""} onChange={(e) => setAsUid(e.target.value)}>
-                  {team
-                    .filter((u) => u.active)
-                    .map((u) => (
-                      <option key={u.uid} value={u.uid}>
-                        {u.uid === staff?.uid ? `${u.name} (eu)` : u.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
-            <button onClick={assign} disabled={!!busy} className="btn btn-primary">
-              {busy === "assign" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hand className="h-4 w-4" />}
-              {isAdmin && asUid && asUid !== staff?.uid ? "Atribuir" : "Pegar atendimento"}
-            </button>
-          </div>
+          <button onClick={assign} disabled={!!busy} className="btn btn-primary">
+            {busy === "assign" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hand className="h-4 w-4" />} Pegar atendimento
+          </button>
+          {askAssign && <AssignModal team={team} confirmLabel="Pegar atendimento" onConfirm={assignTo} onClose={() => setAskAssign(false)} />}
         </div>
       ) : !canAct ? (
         <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 pt-3 pb-safe text-sm text-slate-500">
@@ -455,24 +391,10 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
             <VoiceRecorder onSend={sendVoice} onCancel={() => setRecording(false)} onError={setError} />
           ) : (
           <div className="flex items-end gap-1 sm:gap-1.5">
-            <button onClick={() => fileInput.current?.click()} disabled={!!busy} className="shrink-0 rounded-xl p-2 text-slate-500 hover:bg-slate-100 sm:p-2.5" title="Enviar arquivo">
-              <Paperclip className="h-5 w-5" />
-            </button>
             <button onClick={() => photoInput.current?.click()} disabled={!!busy} className="shrink-0 rounded-xl p-2 text-slate-500 hover:bg-slate-100 sm:p-2.5" title="Foto: tirar ou escolher">
               <Camera className="h-5 w-5" />
             </button>
-            <input
-              ref={photoInput}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = "";
-                if (f) pickPhoto(f);
-              }}
-            />
-            <input ref={fileInput} type="file" hidden onChange={onFile} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt" />
+            <input ref={photoInput} type="file" accept="image/*,video/*" hidden onChange={onFile} />
             <textarea
               ref={textarea}
               rows={1}

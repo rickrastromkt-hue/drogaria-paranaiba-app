@@ -8,6 +8,8 @@ import { api, formatPhone } from "@/lib/client";
 import { formatPhoneInput, normalizePhone, onlyDigits } from "@/lib/br";
 import type { Contact } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
+import { useTeam } from "@/lib/hooks";
+import { canDelegate } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { useBranding } from "./BrandingProvider";
 
@@ -20,7 +22,11 @@ type Props = {
 type Target = { phone: string; name: string; photo?: string | null; saved?: boolean };
 
 export function NewConversation({ initialPhone, onClose, onStarted }: Props) {
-  const { me: staff } = useAuth();
+  const { me: staff, staff: account } = useAuth();
+  const delegate = canDelegate(account?.role); // admin/supervisor escolhem quem vai atender
+  const team = useTeam().filter((u) => u.active);
+  const [asUid, setAsUid] = useState("");
+  const attendant = delegate ? team.find((u) => u.uid === asUid) : staff;
   const { branding } = useBranding();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
@@ -45,11 +51,24 @@ export function NewConversation({ initialPhone, onClose, onStarted }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function greeting(clientName: string, agentName?: string) {
+    const first = (clientName || "").trim().split(/\s+/)[0];
+    const hi = `Olá${first && !/^\d+$/.test(first) ? `, ${first}` : ""}!`;
+    return agentName ? `${hi} Aqui é ${agentName.split(" ")[0]}, da ${branding.companyName}. ` : `${hi} Aqui é da ${branding.companyName}. `;
+  }
+
+  function chooseAttendant(uid: string) {
+    setAsUid(uid);
+    const name = team.find((u) => u.uid === uid)?.name;
+    // atualiza a saudação se ela ainda for a automática
+    if (target && (text === greeting(target.name) || team.some((u) => text === greeting(target.name, u.name)))) setText(greeting(target.name, name));
+  }
+
   function choose(t: Target) {
     setTarget(t);
     setError("");
     const first = (t.name || "").trim().split(/\s+/)[0];
-    setText(`Olá${first && !/^\d+$/.test(first) ? `, ${first}` : ""}! Aqui é ${staff?.name?.split(" ")[0] || ""}, da ${branding.companyName}. `);
+    setText(greeting(t.name, attendant?.name));
     setTimeout(() => {
       textRef.current?.focus();
       const l = textRef.current?.value.length || 0;
@@ -75,7 +94,13 @@ export function NewConversation({ initialPhone, onClose, onStarted }: Props) {
     setBusy(true);
     setError("");
     try {
-      const r = await api<{ ticketId: string }>("/api/tickets/start", { phone: target.phone, text, name: target.name });
+      if (delegate && !asUid) throw new Error("Escolha quem vai atender");
+      const r = await api<{ ticketId: string }>("/api/tickets/start", {
+        phone: target.phone,
+        text,
+        name: target.name,
+        ...(delegate && asUid !== account?.uid ? { asUid } : {}),
+      });
       onStarted(r.ticketId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao iniciar conversa");
@@ -170,13 +195,28 @@ export function NewConversation({ initialPhone, onClose, onStarted }: Props) {
                 </button>
               )}
             </div>
+            {delegate && (
+              <div>
+                <label className="label">Quem vai atender?</label>
+                <select className="input" value={asUid} onChange={(e) => chooseAttendant(e.target.value)} required>
+                  <option value="" disabled>
+                    Selecione quem vai atender…
+                  </option>
+                  {team.map((u) => (
+                    <option key={u.uid} value={u.uid}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="label">Primeira mensagem</label>
               <textarea ref={textRef} className="input min-h-[110px]" value={text} onChange={(e) => setText(e.target.value)} required />
-              <p className="mt-1 text-xs text-slate-400">O atendimento já abre em seu nome, com protocolo.</p>
+              <p className="mt-1 text-xs text-slate-400">O atendimento já abre no nome de quem vai atender, com protocolo.</p>
             </div>
             {error && <p className="text-sm text-accent-600">{error}</p>}
-            <button className="btn btn-primary w-full" disabled={busy || !text.trim()}>
+            <button className="btn btn-primary w-full" disabled={busy || !text.trim() || (delegate && !asUid)}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />} Enviar e abrir atendimento
             </button>
           </form>

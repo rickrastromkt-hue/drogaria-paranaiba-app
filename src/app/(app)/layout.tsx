@@ -8,7 +8,8 @@ import { BookUser, History, Loader2, LogOut, MessageCircle, Settings, Users } fr
 import { db } from "@/lib/firebase";
 import { api } from "@/lib/client";
 import { Notifier } from "@/components/Notifier";
-import { ActingBar, SidebarIdentity } from "@/components/ActingSwitcher";
+import { Avatar } from "@/components/Avatar";
+import { ROLE_LABEL } from "@/lib/types";
 import { useBranding } from "@/components/BrandingProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
@@ -86,7 +87,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="flex flex-col items-center gap-2">
-          <SidebarIdentity />
+          <div title={`${staff.name} (${ROLE_LABEL[staff.role] || "Atendente"})`}>
+            <Avatar name={staff.name} size={36} />
+          </div>
           <button onClick={logout} title="Sair" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
             <LogOut className="h-4 w-4" />
           </button>
@@ -94,7 +97,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <ActingBar />
         <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
       </main>
 

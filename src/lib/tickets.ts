@@ -352,8 +352,17 @@ async function resolveWhatsappPhone(phone: string): Promise<string> {
   return phone; // Z-API não respondeu: tenta mesmo assim
 }
 
-export async function startConversation(actor: Actor, rawPhone: string, text: string, nameHint?: string) {
-  const user = actor.agent;
+export async function startConversation(actor: Actor, rawPhone: string, text: string, nameHint?: string, asUid?: string) {
+  // Quem vai atender: o escolhido no "Quem vai atender?" (admin/supervisor) ou o próprio usuário.
+  let user = actor.agent;
+  if (asUid && asUid !== actor.real.uid) {
+    if (actor.real.role !== "admin" && actor.real.role !== "supervisor")
+      throw new HttpError(403, "Apenas administradores e supervisores podem iniciar em nome de outra pessoa");
+    const data = (await db().doc(`users/${asUid}`).get()).data() as StaffUser | undefined;
+    if (!data || !data.active) throw new HttpError(400, "Atendente inválido ou inativo");
+    user = { ...data, uid: asUid };
+  }
+  const participants = user.uid !== actor.real.uid ? [actor.real.uid] : [];
   const typed = normalizePhone(rawPhone);
   if (typed.length < 12 || typed.length > 13) throw new HttpError(400, "Número inválido. Use DDD + número.");
   if (!text.trim()) throw new HttpError(400, "Escreva a primeira mensagem");
@@ -375,7 +384,7 @@ export async function startConversation(actor: Actor, rawPhone: string, text: st
       if (active.status === "open" && active.assignedTo !== user.uid && !active.participants?.includes(user.uid) && actor.real.role !== "admin")
         throw new HttpError(409, `Este cliente já está em atendimento com ${active.assignedName}`);
       if (active.status === "waiting")
-        tx.update(activeRef, { status: "open", assignedTo: user.uid, assignedName: user.name, assignedAt: now, awaitingCustomerSince: null });
+        tx.update(activeRef, { status: "open", assignedTo: user.uid, assignedName: user.name, participants, assignedAt: now, awaitingCustomerSince: null });
       return { ticketId: activeRef.id, created: false };
     }
 
@@ -389,6 +398,7 @@ export async function startConversation(actor: Actor, rawPhone: string, text: st
       status: "open",
       assignedTo: user.uid,
       assignedName: user.name,
+      participants,
       createdAt: now,
       assignedAt: now,
       lastMessageAt: now,
@@ -412,7 +422,11 @@ export async function startConversation(actor: Actor, rawPhone: string, text: st
     return { ticketId: ref.id, created: true };
   });
 
-  if (created) await addSystemNote(ticketRef(ticketId), `${user.name} iniciou a conversa`);
+  if (created)
+    await addSystemNote(
+      ticketRef(ticketId),
+      user.uid !== actor.real.uid ? `${actor.real.name} iniciou a conversa para ${user.name}` : `${user.name} iniciou a conversa`
+    );
   await agentSend(ticketId, actor, { type: "text", text: text.trim() });
   return { ticketId };
 }
@@ -705,8 +719,78 @@ export async function closeTicket(
   return true;
 }
 
+/** Sem escolha no menu em 1 minuto: o cliente vai sozinho para a Fila. */
+const MENU_TO_QUEUE_MS = 60_000;
+
+async function promoteMenuToQueue(): Promise<number> {
+  const cutoff = Date.now() - MENU_TO_QUEUE_MS;
+  const snap = await db().collection("contacts").where("menu.pendingSince", "<=", cutoff).get();
+  let moved = 0;
+  for (const d of snap.docs) {
+    const ticketId = await db()
+      .runTransaction(async (tx) => {
+        const cs = await tx.get(d.ref);
+        const c = cs.data() as (Contact & { menu?: MenuState; waName?: string }) | undefined;
+        const menu = c?.menu;
+        if (!c || !menu?.pendingSince || menu.pendingSince > cutoff) return null;
+        // já tem atendimento aberto? só limpa o menu
+        if (c.activeTicketId) {
+          const a = await tx.get(ticketRef(c.activeTicketId));
+          if (a.exists && a.data()!.status !== "closed") {
+            tx.update(d.ref, { "menu.pendingSince": null, "menu.pending": [] });
+            return null;
+          }
+        }
+        const counterSnap = await tx.get(db().doc("meta/counters"));
+        const msgs = (menu.pending || []).filter(Boolean);
+        const now = Date.now();
+        const ref = db().collection("tickets").doc();
+        const last = msgs[msgs.length - 1];
+        const tk: Omit<Ticket, "id"> = {
+          protocol: nextProtocol(tx, counterSnap),
+          phone: c.phone,
+          contactName: c.name || c.waName || c.phone,
+          contactPhoto: c.photo ?? null,
+          status: "waiting",
+          assignedTo: null,
+          assignedName: null,
+          createdAt: msgs[0]?.createdAt ?? now,
+          assignedAt: null,
+          lastMessageAt: last?.createdAt ?? now,
+          lastMessagePreview: last ? previewOf(last.type, last.text) : "",
+          lastMessageFromMe: false,
+          awaitingCustomerSince: null,
+          unread: msgs.length,
+        };
+        tx.set(ref, tk);
+        for (const m of msgs) {
+          const { id, ...rest } = m;
+          tx.set(ref.collection("messages").doc(id), { source: "customer", ...rest } satisfies Omit<Message, "id">);
+        }
+        tx.update(d.ref, {
+          activeTicketId: ref.id,
+          lastTicketId: ref.id,
+          "menu.pendingSince": null,
+          "menu.pending": [],
+        });
+        return ref.id;
+      })
+      .catch((e) => {
+        console.error("menu->fila", d.id, e);
+        return null;
+      });
+    if (ticketId) {
+      moved++;
+      await addSystemNote(ticketRef(ticketId), "Cliente não escolheu uma opção do menu — enviado para a fila").catch(() => {});
+      await sendWelcome(ticketId).catch((e) => console.error("welcome", e));
+    }
+  }
+  return moved;
+}
+
 /** Encerra atendimentos em que o cliente não respondeu dentro do prazo configurado. */
 export async function sweepInactive(): Promise<number> {
+  await promoteMenuToQueue().catch((e) => console.error("promoteMenuToQueue", e));
   const settings = await getSettings();
   const minutes = Math.max(1, Number(settings.autoCloseMinutes) || 10);
   const cutoff = Date.now() - minutes * 60_000;
