@@ -105,6 +105,8 @@ export interface Settings {
   closedMessage: string;
   inactivityMessage: string;
   autoCloseMinutes: number;
+  /** Se o cliente voltar até X horas depois de encerrado, reabre o mesmo atendimento (0 = desliga). */
+  reopenHours: number;
   signMessages: boolean;
   /** Menu inicial: pergunta o assunto antes de abrir o atendimento */
   menuEnabled: boolean;
@@ -140,6 +142,7 @@ export const DEFAULT_SETTINGS: Settings = {
   inactivityMessage:
     "Como não tivemos retorno, o atendimento *{protocolo}* foi encerrado. Se precisar, é só mandar uma nova mensagem. ❤️",
   autoCloseMinutes: 10,
+  reopenHours: 12,
   signMessages: true,
   menuEnabled: true,
   menuMessage:

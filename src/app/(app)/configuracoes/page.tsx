@@ -109,6 +109,7 @@ function MessagesForm() {
     await setDoc(doc(db(), "settings", "general"), {
       ...form,
       autoCloseMinutes: Math.max(1, Math.min(240, Number(form.autoCloseMinutes) || 10)),
+      reopenHours: Math.max(0, Math.min(72, Number.isFinite(Number(form.reopenHours)) ? Number(form.reopenHours) : 12)),
     });
     setSaving(false);
     setSaved(true);
@@ -232,6 +233,20 @@ function MessagesForm() {
               onChange={(e) => setForm({ ...form, autoCloseMinutes: Number(e.target.value) })}
             />
             <p className="mt-1 text-xs text-slate-400">Conta a partir da última mensagem da empresa sem resposta.</p>
+          </div>
+          <div>
+            <label className="label">Reabrir o mesmo atendimento se o cliente voltar em até (horas)</label>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              max={72}
+              value={form.reopenHours}
+              onChange={(e) => setForm({ ...form, reopenHours: Number(e.target.value) })}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Volta para quem atendeu (ou para a fila), sem menu e sem novo protocolo. Use 0 para sempre abrir um atendimento novo.
+            </p>
           </div>
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
             <input

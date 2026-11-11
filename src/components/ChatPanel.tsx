@@ -14,6 +14,7 @@ import { MessageBubble } from "./MessageBubble";
 import { ContactForm } from "./ContactForm";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { AssignModal } from "./AssignModal";
+import { PreviousTickets } from "./PreviousTickets";
 
 type Props = {
   ticket: Ticket;
@@ -310,6 +311,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
 
       {/* Mensagens */}
       <div className="chat-bg min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-3 sm:px-8 sm:py-4">
+        {!loadingMsgs && <PreviousTickets key={ticket.id} phone={ticket.phone} currentId={ticket.id} />}
         {loadingMsgs && (
           <div className="flex justify-center py-10">
             <Loader2 className="h-5 w-5 animate-spin text-brand-600" />

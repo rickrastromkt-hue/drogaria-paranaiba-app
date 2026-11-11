@@ -190,6 +190,31 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
       if (dup.exists) return { action: "none", ticketId: ref.id };
     }
 
+    // Cliente voltou pouco depois de encerrar: reabre o MESMO atendimento (sem menu, sem novo protocolo).
+    let reopen: Record<string, unknown> | null = null;
+    const reopenMs = Math.max(0, Number(settings.reopenHours) || 0) * 3_600_000;
+    if (!ref && reopenMs > 0 && contact?.lastTicketId) {
+      const lr = ticketRef(contact.lastTicketId);
+      const lt = (await tx.get(lr)).data() as Ticket | undefined;
+      if (lt && lt.status === "closed" && lt.closedBy !== "finance" && (lt.closedAt || 0) >= now - reopenMs) {
+        const dup = await tx.get(lr.collection("messages").doc(msgId));
+        if (dup.exists) return { action: "none", ticketId: lr.id };
+        // volta para quem atendeu (se ainda estiver ativo); senão, para a fila
+        const prev = lt.assignedTo ? ((await tx.get(db().doc(`users/${lt.assignedTo}`))).data() as StaffUser | undefined) : undefined;
+        const back = !!prev?.active;
+        reopen = {
+          status: back ? "open" : "waiting",
+          ...(back ? {} : { assignedTo: null, assignedName: null, participants: [], assignedAt: null }),
+          closedAt: null,
+          closedBy: null,
+          closedByName: null,
+          closedByUid: null,
+        };
+        ref = lr;
+        tx.set(contactRef, { activeTicketId: lr.id, menu: { pendingSince: null, pending: [], financeAt: null } }, { merge: true });
+      }
+    }
+
     // Todas as leituras antes de qualquer escrita (regra das transações do Firestore).
     const counterSnap = !ref ? await tx.get(counterRef) : null;
 
@@ -301,6 +326,7 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
         lastMessageFromMe: false,
         awaitingCustomerSince: null,
         unread: FieldValue.increment(1),
+        ...(reopen || {}),
       });
     }
 
@@ -309,7 +335,7 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
       tx.set(ref.collection("messages").doc(id), { source: "customer", ...rest } satisfies Omit<Message, "id">);
     }
 
-    return { action: isNew ? "welcome" : "none", ticketId: ref.id, isNew };
+    return { action: isNew ? "welcome" : reopen ? "reopened" : "none", ticketId: ref.id, isNew };
   });
 }
 
@@ -439,7 +465,7 @@ type PendingMessage = ReturnType<typeof parseContent> & { id: string; createdAt:
 type MenuState = { pendingSince?: number | null; pending?: PendingMessage[]; financeAt?: number | null };
 
 export type ReceivedResult = {
-  action: "none" | "welcome" | "menu" | "invalid" | "finance";
+  action: "none" | "welcome" | "menu" | "invalid" | "finance" | "reopened";
   ticketId?: string;
   isNew?: boolean;
   name?: string;
@@ -496,6 +522,7 @@ async function sendMenu(phone: string, s: Settings, name?: string) {
 export async function afterReceived(phone: string, r: ReceivedResult | null) {
   if (!r) return;
   if (r.action === "welcome" && r.ticketId) return sendWelcome(r.ticketId);
+  if (r.action === "reopened" && r.ticketId) return void (await addSystemNote(ticketRef(r.ticketId), "Cliente voltou — atendimento reaberto"));
   if (r.action === "none") return;
   const s = await getSettings();
   if (r.action === "menu") return sendMenu(phone, s, r.name);
