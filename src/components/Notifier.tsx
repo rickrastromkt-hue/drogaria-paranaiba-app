@@ -6,6 +6,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { Bell, BellRing, MessageCircle, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { playNotification } from "@/lib/client";
+import { enablePush, registerServiceWorker } from "@/lib/pushClient";
 import type { StaffUser, Ticket } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { useBranding } from "./BrandingProvider";
@@ -34,10 +35,13 @@ export function Notifier({ staff, onWaitingCount }: { staff: StaffUser; onWaitin
   const seq = useRef(0);
 
   useEffect(() => {
+    registerServiceWorker();
     if (typeof Notification === "undefined") return;
     setPerm(Notification.permission);
+    // Já permitido: garante que este aparelho está inscrito para receber push
+    if (Notification.permission === "granted") enablePush(false);
     try {
-      setBannerClosed(localStorage.getItem("notif-banner-closed") === "1");
+      setBannerClosed(localStorage.getItem("notif-banner-closed-v2") === "1");
     } catch {}
   }, []);
 
@@ -127,15 +131,15 @@ export function Notifier({ staff, onWaitingCount }: { staff: StaffUser; onWaitin
 
   async function enable() {
     if (typeof Notification === "undefined") return;
-    const p = await Notification.requestPermission();
-    setPerm(p);
     playNotification(); // libera o som no navegador
+    const r = await enablePush(true);
+    setPerm(r === "granted" || r === "error" ? "granted" : r === "unsupported" ? "unsupported" : r);
   }
 
   function closeBanner() {
     setBannerClosed(true);
     try {
-      localStorage.setItem("notif-banner-closed", "1");
+      localStorage.setItem("notif-banner-closed-v2", "1");
     } catch {}
   }
 
@@ -146,7 +150,7 @@ export function Notifier({ staff, onWaitingCount }: { staff: StaffUser; onWaitin
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
             <BellRing className="h-4 w-4" />
           </div>
-          <p className="flex-1 text-sm text-slate-600">Ative as notificações para ser avisado de novas mensagens mesmo com o sistema minimizado.</p>
+          <p className="flex-1 text-sm text-slate-600">Ative as notificações para ser avisado de novas mensagens no celular, mesmo com o app fechado.</p>
           <button onClick={enable} className="btn btn-primary px-3 py-1.5 text-xs">
             Ativar
           </button>

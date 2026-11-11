@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { afterReceived, handleReceived, handleStatus, sweepInactive } from "@/lib/tickets";
+import { pushForTicket } from "@/lib/push";
 import type { ZapiReceived, ZapiStatus } from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,12 @@ export async function POST(req: Request) {
       const payload = body as ZapiReceived;
       const r = await handleReceived(payload);
       if (r && r.action !== "none") after(() => afterReceived(payload.phone, r).catch((e) => console.error("auto-resposta", e)));
+      // Notificação no celular da equipe (mensagem do cliente em atendimento ou na fila)
+      if (r?.ticketId && !payload.fromMe && ["none", "welcome", "reopened"].includes(r.action)) {
+        const id = r.ticketId;
+        const kind = r.action === "welcome" ? "queue" : "inbound";
+        after(() => pushForTicket(id, kind).catch((e) => console.error("push", e)));
+      }
     } else if (body.type === "MessageStatusCallback") {
       await handleStatus(body as ZapiStatus);
     }

@@ -66,3 +66,26 @@ Mande "oi" de outro celular para o número da empresa:
 
 Todas as empresas usam o mesmo repositório. Quando o código é atualizado no GitHub, **cada projeto da Vercel ligado a ele publica sozinho**.
 As configurações de cada empresa (nome, logo, cores e mensagens) ficam no Firebase dela e não são afetadas.
+
+---
+
+## 7. App no celular e notificações
+
+### Notificações (push)
+1. Firebase → **Configurações do projeto → Cloud Messaging → Certificados push da Web → Gerar par de chaves**.
+2. Salve a chave pública no Firestore em `settings/push` → `{ vapidKey: "..." }`
+   (ou na variável `NEXT_PUBLIC_FIREBASE_VAPID_KEY` da Vercel).
+3. Cada atendente, no celular, toca em **Ativar** no aviso de notificações (uma vez).
+
+Avisos enviados: **novo cliente na fila** e **mensagem na fila** (toda a equipe), **mensagem de um cliente em atendimento** (responsável e quem atende junto), **atendimento atribuído/transferido para você**.
+No iPhone, as notificações só funcionam com o app adicionado à tela inicial (Safari → Compartilhar → Adicionar à Tela de Início).
+
+### Instalar (Android)
+- **Sem APK:** abra o site no Chrome → menu ⋮ → **Instalar app**.
+- **Com APK:**
+  1. Acesse https://www.pwabuilder.com, cole o endereço do site e clique em **Start**.
+  2. **Package for stores → Android → Generate Package**. Anote o *Package ID* (ex.: `br.com.empresa.atendimento`).
+  3. Baixe o `.zip`: ele traz o **APK** (para instalar direto), o **AAB** (Play Store) e o arquivo `assetlinks.json` com a impressão digital (SHA-256) da chave.
+  4. Salve no Firestore em `settings/android` → `{ packageName: "<Package ID>", sha256: ["<SHA-256 do assetlinks.json>"] }`.
+     Isso publica `https://SEU-DOMINIO/.well-known/assetlinks.json` e faz o app abrir em tela cheia (sem barra do navegador).
+  5. Guarde o arquivo da chave de assinatura (`signing.keystore`) e as senhas: são necessários para gerar atualizações do APK.

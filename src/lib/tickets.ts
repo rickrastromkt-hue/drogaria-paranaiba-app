@@ -5,6 +5,7 @@ import { HttpError, type Actor } from "./api";
 import { parseContent, previewOf, zapi, type ZapiReceived, type ZapiStatus } from "./zapi";
 import { normalizePhone } from "./br";
 import { saveMedia } from "./mediaStore";
+import { pushForTicket } from "./push";
 import { mergeBranding, type Branding } from "./branding";
 import {
   DEFAULT_SETTINGS,
@@ -617,6 +618,7 @@ export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser,
     (by && by.uid !== agent.uid ? `${by.name} atribuiu o atendimento a ${agent.name}` : `${agent.name} assumiu o atendimento`) +
       (viaName ? ` (via ${viaName})` : "")
   );
+  if (by && by.uid !== agent.uid) pushForTicket(id, "assigned", agent).catch((e) => console.error("push", e));
   const settings = await getSettings();
   if (settings.assignedMessage.trim()) {
     const text = renderTemplate(settings.assignedMessage, { ...(await brandVars()),
@@ -689,6 +691,7 @@ export async function transferTicket(id: string, actor: Actor, toUid: string) {
     assignedAt: Date.now(),
   });
   await addSystemNote(ticketRef(id), `${user.name} transferiu o atendimento para ${to.name}`);
+  await pushForTicket(id, "assigned", { ...to, uid: toUid }).catch((e) => console.error("push", e));
   return { ok: true };
 }
 
@@ -797,6 +800,7 @@ export async function moveMenuContactToQueue(phone: string, by: StaffUser): Prom
   });
   if (result.created) {
     await addSystemNote(ticketRef(result.id), `${by.name} moveu o cliente do menu para a fila`).catch(() => {});
+    await pushForTicket(result.id, "queue").catch((e) => console.error("push", e));
     await sendWelcome(result.id).catch((e) => console.error("welcome", e));
   }
   return result.id;

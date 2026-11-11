@@ -5,6 +5,7 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { setActingHeader } from "@/lib/client";
+import { disablePush } from "@/lib/pushClient";
 import { canDelegate, type StaffUser } from "@/lib/types";
 
 type Ctx = {
@@ -132,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         logout: async () => {
           setActing(null);
+          await disablePush(); // este aparelho para de receber notificações desta conta
           await signOut(auth());
         },
       }}

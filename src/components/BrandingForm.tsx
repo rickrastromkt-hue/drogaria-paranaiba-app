@@ -170,7 +170,7 @@ export function BrandingForm({ password }: { password: string }) {
           hint="Barra lateral, aba do navegador e notificações."
           value={form.icon}
           onChange={(v) => set("icon", v)}
-          max={[256, 256]}
+          max={[512, 512]}
           square
         />
       </div>

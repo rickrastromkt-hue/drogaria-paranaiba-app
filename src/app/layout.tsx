@@ -9,7 +9,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 export const metadata: Metadata = {
   title: "Central de Atendimento",
   description: "Central de atendimento via WhatsApp",
-  icons: { icon: "/logo-default.svg" },
+  icons: { icon: "/logo-default.svg", apple: "/pwa-icon/180" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Atendimento" },
 };
 
 // Sem zoom automático ao tocar nos campos (iPhone) e respeitando a área segura da tela.

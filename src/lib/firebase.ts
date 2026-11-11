@@ -14,7 +14,7 @@ const config = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-function app(): FirebaseApp {
+export function app(): FirebaseApp {
   return getApps().length ? getApp() : initializeApp(config);
 }
 
