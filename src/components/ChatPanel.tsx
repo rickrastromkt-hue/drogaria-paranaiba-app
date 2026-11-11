@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { ArrowLeft, ArrowRightLeft, BadgeCheck, Camera, CheckCircle2, Mic, Hand, Loader2, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
 import { ImagePlus } from "lucide-react";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { getDownloadURL, ref as storageRef, uploadBytesResumable } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { MAX_UPLOAD_BYTES, api, blobToDataUrl, duration, formatPhone, useNow } from "@/lib/client";
-import { canDelegate, type Contact, type Message, type QuickReply, type StaffUser, type Ticket } from "@/lib/types";
+import { canDelegate, type Contact, type Message, type MessageType, type QuickReply, type StaffUser, type Ticket } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
 import { MessageBubble } from "./MessageBubble";
@@ -131,33 +131,73 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     run("transfer", () => api(`/api/tickets/${ticket.id}/transfer`, { toUid: uid }));
   };
 
+  /* ---------- Envio otimista: a mensagem aparece na hora, com relógio / carregador ---------- */
+
+  type Outbox = {
+    key: string;
+    type: MessageType;
+    text: string;
+    localUrl: string | null;
+    fileName?: string;
+    progress?: number; // 0–100 (upload de foto/vídeo)
+    error?: string;
+    createdAt: number;
+    job: (onProgress: (p: number) => void) => Promise<unknown>;
+  };
+  const [outbox, setOutbox] = useState<Outbox[]>([]);
+
+  function patchOut(key: string, patch: Partial<Outbox>) {
+    setOutbox((list) => list.map((o) => (o.key === key ? { ...o, ...patch } : o)));
+  }
+
+  function dropOut(key: string) {
+    setOutbox((list) => {
+      const o = list.find((x) => x.key === key);
+      if (o?.localUrl) setTimeout(() => URL.revokeObjectURL(o.localUrl!), 30_000);
+      return list.filter((x) => x.key !== key);
+    });
+  }
+
+  async function runOut(o: Outbox) {
+    patchOut(o.key, { error: undefined, progress: 0 });
+    try {
+      await o.job((p) => patchOut(o.key, { progress: p }));
+      dropOut(o.key); // a mensagem verdadeira chega pelo Firestore
+    } catch (e) {
+      patchOut(o.key, { error: e instanceof Error ? e.message : "Falha ao enviar" });
+    }
+  }
+
+  function enqueue(type: MessageType, textValue: string, localUrl: string | null, job: Outbox["job"], fileName?: string) {
+    const o: Outbox = { key: `out-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, type, text: textValue, localUrl, fileName, createdAt: Date.now(), job };
+    setOutbox((list) => [...list, o]);
+    setError("");
+    setTimeout(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), 30);
+    runOut(o);
+  }
+
   function send() {
     const t = text.trim();
-    if (busy) return;
     if (pendingPhoto) {
       const p = pendingPhoto;
-      run("send", async () => {
-        await uploadAndSend(p.file, p.name, t);
-        clearPhoto();
-        setText("");
-        textarea.current?.focus();
-      });
+      setPendingPhoto(null); // a prévia vira a bolha "enviando"
+      setText("");
+      enqueue("image", t, p.preview, (onP) => uploadAndSend(p.file, p.name, t, onP), p.name);
+      textarea.current?.focus();
       return;
     }
     if (!t) return;
-    run("send", async () => {
-      await api(`/api/tickets/${ticket.id}/send`, { type: "text", text: t });
-      setText("");
-      textarea.current?.focus();
-    });
+    setText("");
+    enqueue("text", t, null, () => api(`/api/tickets/${ticket.id}/send`, { type: "text", text: t }));
+    textarea.current?.focus();
   }
 
   /**
    * Envia um arquivo pelo WhatsApp.
    * - Áudio: vai em base64 direto para a Z-API (cópia guardada no Firestore).
-   * - Imagem, vídeo e documento: sobem para o Firebase Storage, sem redução e sem limite no sistema.
+   * - Imagem, vídeo e documento: sobem para o Firebase Storage (com progresso), sem limite no sistema.
    */
-  async function uploadAndSend(file: Blob, fileName: string, caption = "") {
+  async function uploadAndSend(file: Blob, fileName: string, caption = "", onProgress?: (p: number) => void) {
     const mime = file.type || "application/octet-stream";
     const type = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "document";
     let mediaUrl: string;
@@ -168,7 +208,15 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       const safeName = fileName.replace(/[^\w.\-]+/g, "_");
       const r = storageRef(storage(), `uploads/${ticket.id}/${Date.now()}-${safeName}`);
       try {
-        await uploadBytes(r, file, { contentType: mime });
+        await new Promise<void>((resolve, reject) => {
+          const task = uploadBytesResumable(r, file, { contentType: mime });
+          task.on(
+            "state_changed",
+            (s) => onProgress?.(s.totalBytes ? Math.round((s.bytesTransferred / s.totalBytes) * 100) : 0),
+            reject,
+            () => resolve()
+          );
+        });
       } catch (e) {
         const code = (e as { code?: string }).code || "";
         if (code.includes("unauthorized")) throw new Error("O Storage recusou o arquivo. Confira as regras do Storage no Firebase.");
@@ -176,6 +224,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       }
       mediaUrl = await getDownloadURL(r);
     }
+    onProgress?.(100);
     await api(`/api/tickets/${ticket.id}/send`, {
       type,
       text: type === "image" || type === "video" ? caption : "",
@@ -203,10 +252,14 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     e.target.value = "";
     if (!file) return;
     if (file.type.startsWith("image/")) return pickPhoto(file); // fotos: mostra a prévia antes de enviar
-    run("send", () => uploadAndSend(file, file.name));
+    const type: MessageType = file.type.startsWith("video/") ? "video" : "document";
+    enqueue(type, "", URL.createObjectURL(file), (onP) => uploadAndSend(file, file.name, "", onP), file.name);
   }
 
-  const sendVoice = (mp3: Blob) => run("send", () => uploadAndSend(mp3, `audio-${Date.now()}.mp3`));
+  const sendVoice = (mp3: Blob) => {
+    const name = `audio-${Date.now()}.mp3`;
+    enqueue("audio", "", URL.createObjectURL(mp3), () => uploadAndSend(mp3, name), name);
+  };
 
 
   const remove = () => {
@@ -332,6 +385,23 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
             </div>
           );
         })}
+        {outbox.map((o) => (
+          <MessageBubble
+            key={o.key}
+            m={{
+              id: o.key,
+              source: "agent",
+              type: o.type,
+              text: o.text,
+              mediaUrl: o.localUrl,
+              fileName: o.fileName ?? null,
+              agentName: staff?.name ?? null,
+              status: o.error ? "failed" : "pending",
+              createdAt: o.createdAt,
+            }}
+            sending={{ progress: o.progress, error: o.error, onRetry: () => runOut(o), onDiscard: () => dropOut(o.key) }}
+          />
+        ))}
         <div ref={bottom} />
       </div>
 
@@ -413,9 +483,9 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
               className="input max-h-40 min-h-[42px] resize-none py-2.5"
               style={{ fieldSizing: "content" } as React.CSSProperties}
             />
-            {text.trim() || pendingPhoto || busy === "send" ? (
-              <button onClick={send} disabled={!!busy || (!text.trim() && !pendingPhoto)} className="btn btn-primary h-[42px] w-[42px] shrink-0 p-0" title="Enviar">
-                {busy === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+            {text.trim() || pendingPhoto ? (
+              <button onClick={send} disabled={!text.trim() && !pendingPhoto} className="btn btn-primary h-[42px] w-[42px] shrink-0 p-0" title="Enviar">
+                <SendHorizontal className="h-4 w-4" />
               </button>
             ) : (
               <button
