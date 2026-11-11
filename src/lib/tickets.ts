@@ -537,7 +537,7 @@ async function loadTicket(id: string): Promise<Ticket> {
   return { ...(snap.data() as Ticket), id };
 }
 
-export async function assignTicket(id: string, agent: StaffUser) {
+export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser) {
   const ref = ticketRef(id);
   const ticket = await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -557,7 +557,10 @@ export async function assignTicket(id: string, agent: StaffUser) {
   });
   if (ticket.status === "open") return { ok: true };
 
-  await addSystemNote(ref, `${agent.name} assumiu o atendimento`);
+  await addSystemNote(
+    ref,
+    by && by.uid !== agent.uid ? `${by.name} atribuiu o atendimento a ${agent.name}` : `${agent.name} assumiu o atendimento`
+  );
   const settings = await getSettings();
   if (settings.assignedMessage.trim()) {
     const text = renderTemplate(settings.assignedMessage, { ...(await brandVars()),

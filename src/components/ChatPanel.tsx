@@ -100,7 +100,10 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     }
   }
 
-  const assign = () => run("assign", () => api(`/api/tickets/${ticket.id}/assign`));
+  const isAdmin = staff?.role === "admin";
+  const [asUid, setAsUid] = useState("");
+  const assign = () =>
+    run("assign", () => api(`/api/tickets/${ticket.id}/assign`, isAdmin && asUid && asUid !== staff?.uid ? { asUid } : {}));
   const close = () => {
     if (!confirm("Encerrar este atendimento? O cliente receberá a mensagem de encerramento.")) return;
     run("close", () => api(`/api/tickets/${ticket.id}/close`));
@@ -284,9 +287,26 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       ) : ticket.status === "waiting" ? (
         <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 py-3">
           <span className="text-sm text-slate-500">Cliente aguardando na fila</span>
-          <button onClick={assign} disabled={!!busy} className="btn btn-primary">
-            {busy === "assign" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hand className="h-4 w-4" />} Pegar atendimento
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {isAdmin && (
+              <label className="flex items-center gap-2 text-sm text-slate-500">
+                <span className="hidden sm:inline">Atender como</span>
+                <select className="input input-sm w-auto min-w-[150px]" value={asUid || staff?.uid || ""} onChange={(e) => setAsUid(e.target.value)}>
+                  {team
+                    .filter((u) => u.active)
+                    .map((u) => (
+                      <option key={u.uid} value={u.uid}>
+                        {u.uid === staff?.uid ? `${u.name} (eu)` : u.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
+            <button onClick={assign} disabled={!!busy} className="btn btn-primary">
+              {busy === "assign" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hand className="h-4 w-4" />}
+              {isAdmin && asUid && asUid !== staff?.uid ? "Atribuir" : "Pegar atendimento"}
+            </button>
+          </div>
         </div>
       ) : !canAct ? (
         <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-500">
