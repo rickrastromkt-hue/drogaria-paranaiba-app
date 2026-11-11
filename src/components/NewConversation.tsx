@@ -20,7 +20,7 @@ type Props = {
 type Target = { phone: string; name: string; photo?: string | null; saved?: boolean };
 
 export function NewConversation({ initialPhone, onClose, onStarted }: Props) {
-  const { staff } = useAuth();
+  const { me: staff } = useAuth();
   const { branding } = useBranding();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");

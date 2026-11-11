@@ -8,11 +8,11 @@ import { BookUser, History, Loader2, LogOut, MessageCircle, Settings, Users } fr
 import { db } from "@/lib/firebase";
 import { api } from "@/lib/client";
 import { Notifier } from "@/components/Notifier";
+import { ActingBar, SidebarIdentity } from "@/components/ActingSwitcher";
 import { useBranding } from "@/components/BrandingProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { Logo } from "@/components/Logo";
 import { Credit } from "@/components/Credit";
-import { Avatar } from "@/components/Avatar";
 
 const NAV = [
   { href: "/atendimentos", label: "Conversas", icon: MessageCircle },
@@ -23,7 +23,7 @@ const NAV = [
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { staff, user, loading, logout } = useAuth();
+  const { staff, me, user, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [waiting, setWaiting] = useState(0);
@@ -58,7 +58,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-dvh flex-col md:flex-row">
-      <Notifier staff={staff} onWaitingCount={setWaiting} />
+      <Notifier staff={me ?? staff} onWaitingCount={setWaiting} />
       <aside className="hidden w-[84px] shrink-0 flex-col items-center border-r border-slate-200/70 bg-white py-4 md:flex">
         <Link href="/atendimentos" className="mb-6 px-2">
           <Logo variant="icon" className="h-11" />
@@ -86,16 +86,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="flex flex-col items-center gap-2">
-          <div title={`${staff.name} (${staff.role === "admin" ? "Administrador" : "Atendente"})`}>
-            <Avatar name={staff.name} size={36} />
-          </div>
+          <SidebarIdentity />
           <button onClick={logout} title="Sair" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
             <LogOut className="h-4 w-4" />
           </button>
         </div>
       </aside>
 
-      <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ActingBar />
+        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      </main>
 
       <nav className="flex shrink-0 border-t border-slate-200 bg-white md:hidden">
         {items.map(({ href, label, icon: Icon }) => {

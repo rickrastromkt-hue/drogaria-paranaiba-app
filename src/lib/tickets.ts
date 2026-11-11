@@ -1,7 +1,7 @@
 import "server-only";
 import { FieldValue, type DocumentReference, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import { adminApp, adminDb } from "./firebase-admin";
-import { HttpError } from "./api";
+import { HttpError, type Actor } from "./api";
 import { parseContent, previewOf, zapi, type ZapiReceived, type ZapiStatus } from "./zapi";
 import { normalizePhone } from "./br";
 import { mergeBranding, type Branding } from "./branding";
@@ -77,7 +77,7 @@ async function deliver(phone: string, msg: Outgoing, signature?: string) {
 export async function sendOutbound(
   ticket: Pick<Ticket, "id" | "phone">,
   msg: Outgoing,
-  opts: { source: "agent" | "bot"; agent?: StaffUser | null; startTimer: boolean; signature?: string; signedAs?: string | null }
+  opts: { source: "agent" | "bot"; agent?: StaffUser | null; startTimer: boolean; signature?: string; viaName?: string | null }
 ) {
   const res = await deliver(ticket.phone, msg, opts.signature);
   const now = Date.now();
@@ -91,7 +91,7 @@ export async function sendOutbound(
     mimeType: msg.mimeType ?? null,
     agentUid: opts.agent?.uid ?? null,
     agentName: opts.agent?.name ?? null,
-    signedAs: opts.signedAs ?? null,
+    viaName: opts.viaName ?? null,
     status: "sent",
     createdAt: now,
   };
@@ -342,7 +342,8 @@ async function resolveWhatsappPhone(phone: string): Promise<string> {
   return phone; // Z-API não respondeu: tenta mesmo assim
 }
 
-export async function startConversation(user: StaffUser, rawPhone: string, text: string, nameHint?: string) {
+export async function startConversation(actor: Actor, rawPhone: string, text: string, nameHint?: string) {
+  const user = actor.agent;
   const typed = normalizePhone(rawPhone);
   if (typed.length < 12 || typed.length > 13) throw new HttpError(400, "Número inválido. Use DDD + número.");
   if (!text.trim()) throw new HttpError(400, "Escreva a primeira mensagem");
@@ -361,7 +362,7 @@ export async function startConversation(user: StaffUser, rawPhone: string, text:
 
     const active = activeSnap?.exists ? (activeSnap.data() as Ticket) : null;
     if (activeRef && active && active.status !== "closed") {
-      if (active.status === "open" && active.assignedTo !== user.uid && user.role !== "admin")
+      if (active.status === "open" && active.assignedTo !== user.uid && !active.participants?.includes(user.uid) && actor.real.role !== "admin")
         throw new HttpError(409, `Este cliente já está em atendimento com ${active.assignedName}`);
       if (active.status === "waiting")
         tx.update(activeRef, { status: "open", assignedTo: user.uid, assignedName: user.name, assignedAt: now, awaitingCustomerSince: null });
@@ -402,7 +403,7 @@ export async function startConversation(user: StaffUser, rawPhone: string, text:
   });
 
   if (created) await addSystemNote(ticketRef(ticketId), `${user.name} iniciou a conversa`);
-  await agentSend(ticketId, user, { type: "text", text: text.trim() });
+  await agentSend(ticketId, actor, { type: "text", text: text.trim() });
   return { ticketId };
 }
 
@@ -538,7 +539,7 @@ async function loadTicket(id: string): Promise<Ticket> {
   return { ...(snap.data() as Ticket), id };
 }
 
-export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser) {
+export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser, viaName?: string | null) {
   const ref = ticketRef(id);
   const ticket = await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -562,7 +563,8 @@ export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser)
 
   await addSystemNote(
     ref,
-    by && by.uid !== agent.uid ? `${by.name} atribuiu o atendimento a ${agent.name}` : `${agent.name} assumiu o atendimento`
+    (by && by.uid !== agent.uid ? `${by.name} atribuiu o atendimento a ${agent.name}` : `${agent.name} assumiu o atendimento`) +
+      (viaName ? ` (via ${viaName})` : "")
   );
   const settings = await getSettings();
   if (settings.assignedMessage.trim()) {
@@ -576,6 +578,26 @@ export async function assignTicket(id: string, agent: StaffUser, by?: StaffUser)
   return { ok: true };
 }
 
+/**
+ * Em nome de quem a ação aparece:
+ * 1) "Quem está atendendo" escolhido no computador compartilhado;
+ * 2) admin participante de um atendimento que ele atribuiu ("atender como");
+ * 3) o próprio usuário.
+ */
+function displayFor(t: Ticket, actor: Actor): StaffUser {
+  if (actor.agent.uid !== actor.real.uid) return actor.agent;
+  const me = actor.real;
+  if (t.assignedTo && t.assignedTo !== me.uid && t.participants?.includes(me.uid) && t.assignedName)
+    return { ...me, uid: t.assignedTo, name: t.assignedName };
+  return me;
+}
+
+const via = (display: StaffUser, actor: Actor) => (display.uid !== actor.real.uid ? actor.real.name : null);
+
+function canActAs(t: Ticket, actor: Actor) {
+  return canAct(t, actor.real) || canAct(t, actor.agent);
+}
+
 function isParticipant(t: Ticket, user: StaffUser) {
   return t.assignedTo === user.uid || !!t.participants?.includes(user.uid);
 }
@@ -584,29 +606,28 @@ function canAct(t: Ticket, user: StaffUser) {
   return isParticipant(t, user) || user.role === "admin";
 }
 
-export async function agentSend(id: string, user: StaffUser, msg: Outgoing) {
+export async function agentSend(id: string, actor: Actor, msg: Outgoing) {
   const t = await loadTicket(id);
   if (t.status !== "open") throw new HttpError(409, "Pegue o atendimento antes de responder");
-  if (!canAct(t, user)) throw new HttpError(403, "Este atendimento é de outro atendente");
+  if (!canActAs(t, actor)) throw new HttpError(403, "Este atendimento é de outro atendente");
   if (msg.type !== "text" && !msg.mediaUrl) throw new HttpError(400, "Arquivo ausente");
   if (msg.type === "text" && !msg.text.trim()) throw new HttpError(400, "Mensagem vazia");
   const settings = await getSettings();
-  // Participante que atende "como" o responsável: o cliente vê o nome do responsável.
-  const onBehalf = t.assignedTo !== user.uid && !!t.participants?.includes(user.uid) && !!t.assignedName;
-  const shownName = onBehalf ? t.assignedName! : user.name;
+  const display = displayFor(t, actor);
   return sendOutbound(t, msg, {
     source: "agent",
-    agent: user,
+    agent: display,
     startTimer: true,
-    signature: settings.signMessages ? shownName : undefined,
-    signedAs: onBehalf ? shownName : null,
+    signature: settings.signMessages ? display.name : undefined,
+    viaName: via(display, actor),
   });
 }
 
-export async function transferTicket(id: string, user: StaffUser, toUid: string) {
+export async function transferTicket(id: string, actor: Actor, toUid: string) {
   const t = await loadTicket(id);
   if (t.status === "closed") throw new HttpError(409, "Atendimento encerrado");
-  if (t.status === "open" && !canAct(t, user)) throw new HttpError(403, "Este atendimento é de outro atendente");
+  if (t.status === "open" && !canActAs(t, actor)) throw new HttpError(403, "Este atendimento é de outro atendente");
+  const user = displayFor(t, actor);
   const to = (await db().doc(`users/${toUid}`).get()).data() as StaffUser | undefined;
   if (!to || !to.active) throw new HttpError(400, "Atendente inválido");
   await ticketRef(id).update({
@@ -627,17 +648,19 @@ export async function transferTicket(id: string, user: StaffUser, toUid: string)
 export async function closeTicket(
   id: string,
   by: ClosedBy,
-  user: StaffUser | null,
+  actor: Actor | null,
   guard?: (t: Ticket) => boolean
 ): Promise<boolean> {
   const ref = ticketRef(id);
+  let user: StaffUser | null = null;
   const t = await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpError(404, "Atendimento não encontrado");
     const t = { ...(snap.data() as Ticket), id };
     if (t.status === "closed") return null;
-    if (user && t.status === "open" && !canAct(t, user))
+    if (actor && t.status === "open" && !canActAs(t, actor))
       throw new HttpError(403, "Este atendimento é de outro atendente");
+    user = actor ? displayFor(t, actor) : null; // encerra "como" quem está atendendo
     if (guard && !guard(t)) return null;
     const contactRef = db().doc(`contacts/${safeId(t.phone)}`);
     const contact = await tx.get(contactRef);
@@ -646,6 +669,7 @@ export async function closeTicket(
       closedAt: Date.now(),
       closedBy: by,
       closedByName: user?.name ?? null,
+      closedByUid: user?.uid ?? null,
       awaitingCustomerSince: null,
       unread: 0,
     });
@@ -656,12 +680,14 @@ export async function closeTicket(
 
   await addSystemNote(
     ref,
-    by === "inactivity" ? "Encerrado automaticamente por ausência do cliente" : `Encerrado por ${user?.name}`
+    by === "inactivity"
+      ? "Encerrado automaticamente por ausência do cliente"
+      : `Encerrado por ${(user as StaffUser | null)?.name}${actor && user && via(user, actor) ? ` (via ${actor.real.name})` : ""}`
   );
   const settings = await getSettings();
   const tpl = by === "inactivity" ? settings.inactivityMessage : settings.closedMessage;
   if (tpl.trim()) {
-    const text = renderTemplate(tpl, { ...(await brandVars()), nome: t.contactName, atendente: user?.name, protocolo: t.protocol });
+    const text = renderTemplate(tpl, { ...(await brandVars()), nome: t.contactName, atendente: (user as StaffUser | null)?.name, protocolo: t.protocol });
     await sendOutbound(t, { type: "text", text }, { source: "bot", startTimer: false }).catch((e) =>
       console.error("Falha ao enviar mensagem de encerramento", e)
     );

@@ -35,7 +35,7 @@ function dayLabel(ts: number) {
 }
 
 export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinutes = 10, readOnly, onBack, onDeleted, onClose }: Props) {
-  const { staff } = useAuth();
+  const { staff: account, me: staff } = useAuth(); // staff = quem está atendendo; account = conta logada
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [text, setText] = useState("");
@@ -50,7 +50,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
   const now = useNow(1000);
 
   const isMine = ticket.assignedTo === staff?.uid || !!(staff?.uid && ticket.participants?.includes(staff.uid));
-  const canAct = !readOnly && ticket.status === "open" && (isMine || staff?.role === "admin");
+  const canAct = !readOnly && ticket.status === "open" && (isMine || account?.role === "admin");
 
   useEffect(() => {
     setLoadingMsgs(true);
@@ -100,7 +100,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     }
   }
 
-  const isAdmin = staff?.role === "admin";
+  const isAdmin = account?.role === "admin";
   const [asUid, setAsUid] = useState("");
   const assign = () =>
     run("assign", () => api(`/api/tickets/${ticket.id}/assign`, isAdmin && asUid && asUid !== staff?.uid ? { asUid } : {}));
@@ -201,7 +201,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
           </div>
         )}
 
-        {staff?.role === "admin" && (
+        {account?.role === "admin" && (
           <button onClick={remove} disabled={!!busy} className="btn btn-ghost px-2.5 hover:bg-accent-50 hover:text-accent-600" title="Excluir atendimento">
             {busy === "delete" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </button>
@@ -218,7 +218,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
 
         {!readOnly && ticket.status !== "closed" && (
           <div className="flex items-center gap-1.5">
-            {ticket.status === "open" && (isMine || staff?.role === "admin") && (
+            {ticket.status === "open" && (isMine || account?.role === "admin") && (
               <div className="relative">
                 <button onClick={() => setShowTransfer((v) => !v)} className="btn btn-ghost px-2.5" title="Transferir">
                   <ArrowRightLeft className="h-4 w-4" />
@@ -236,7 +236,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
                 )}
               </div>
             )}
-            {(ticket.status === "waiting" || isMine || staff?.role === "admin") && (
+            {(ticket.status === "waiting" || isMine || account?.role === "admin") && (
               <button onClick={close} disabled={!!busy} className="btn btn-danger px-2.5" title="Encerrar">
                 {busy === "close" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 <span className="hidden lg:inline">Encerrar</span>

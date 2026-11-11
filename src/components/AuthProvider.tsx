@@ -4,19 +4,78 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { setActingHeader } from "@/lib/client";
 import type { StaffUser } from "@/lib/types";
 
-type Ctx = { user: User | null; staff: StaffUser | null; loading: boolean; logout: () => Promise<void> };
+type Ctx = {
+  user: User | null;
+  /** Conta logada (permissões). */
+  staff: StaffUser | null;
+  /** Quem está atendendo agora (computador compartilhado). null = a própria conta. */
+  acting: StaffUser | null;
+  /** Identidade efetiva: acting ?? staff. Use para "meus atendimentos", nomes e saudações. */
+  me: StaffUser | null;
+  setActing: (uid: string | null) => void;
+  loading: boolean;
+  logout: () => Promise<void>;
+};
+
+const ACTING_KEY = "acting-as-uid";
 
 // Variáveis NEXT_PUBLIC_* são gravadas no build: se faltarem, é preciso fazer um novo deploy.
 const CONFIGURED = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
-const AuthContext = createContext<Ctx>({ user: null, staff: null, loading: true, logout: async () => {} });
+const AuthContext = createContext<Ctx>({
+  user: null,
+  staff: null,
+  acting: null,
+  me: null,
+  setActing: () => {},
+  loading: true,
+  logout: async () => {},
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [staff, setStaff] = useState<StaffUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actingUid, setActingUid] = useState<string | null>(null);
+  const [acting, setActingUser] = useState<StaffUser | null>(null);
+
+  useEffect(() => {
+    try {
+      setActingUid(localStorage.getItem(ACTING_KEY));
+    } catch {}
+  }, []);
+
+  // Só administradores podem atender em nome de outra pessoa.
+  const effectiveUid = staff?.role === "admin" && actingUid && actingUid !== staff.uid ? actingUid : null;
+
+  useEffect(() => {
+    setActingHeader(effectiveUid);
+    if (!effectiveUid) {
+      setActingUser(null);
+      return;
+    }
+    return onSnapshot(doc(db(), "users", effectiveUid), (snap) => {
+      const d = snap.exists() ? ({ ...(snap.data() as StaffUser), uid: snap.id }) : null;
+      if (!d || !d.active) {
+        setActingUid(null);
+        try {
+          localStorage.removeItem(ACTING_KEY);
+        } catch {}
+      }
+      setActingUser(d && d.active ? d : null);
+    });
+  }, [effectiveUid]);
+
+  function setActing(uid: string | null) {
+    setActingUid(uid);
+    try {
+      if (uid) localStorage.setItem(ACTING_KEY, uid);
+      else localStorage.removeItem(ACTING_KEY);
+    } catch {}
+  }
 
   useEffect(() => {
     if (!CONFIGURED) return;
@@ -62,7 +121,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
   return (
-    <AuthContext.Provider value={{ user, staff, loading, logout: () => signOut(auth()) }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        staff,
+        acting,
+        me: acting ?? staff,
+        setActing,
+        loading,
+        logout: async () => {
+          setActing(null);
+          await signOut(auth());
+        },
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

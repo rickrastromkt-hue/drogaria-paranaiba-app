@@ -1,4 +1,4 @@
-import { HttpError, handler, readJson, requireStaff } from "@/lib/api";
+import { HttpError, handler, readJson, requireActor } from "@/lib/api";
 import { adminDb } from "@/lib/firebase-admin";
 import { UFS, isValidCpf, normalizePhone, onlyDigits } from "@/lib/br";
 import type { Contact } from "@/lib/types";
@@ -7,7 +7,7 @@ type Body = { phone?: string; name?: string; city?: string; uf?: string; cpf?: s
 
 /** Cria ou atualiza um contato salvo. */
 export const POST = handler(async (req: Request) => {
-  const user = await requireStaff(req);
+  const user = (await requireActor(req)).agent;
   const b = await readJson<Body>(req);
 
   const phone = normalizePhone(b.phone || "");

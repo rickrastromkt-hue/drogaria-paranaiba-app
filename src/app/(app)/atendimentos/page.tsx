@@ -16,7 +16,7 @@ import { NewConversation } from "@/components/NewConversation";
 type Tab = "mine" | "queue" | "team";
 
 export default function AtendimentosPage() {
-  const { staff } = useAuth();
+  const { me: staff } = useAuth(); // identidade efetiva (quem está atendendo)
   // "Meu" = sou o responsável ou participo (admin atendendo como outro atendente).
   const isMineT = (t: Ticket) => t.assignedTo === staff?.uid || !!(staff?.uid && t.participants?.includes(staff.uid));
   const [tickets, setTickets] = useState<Ticket[]>([]);

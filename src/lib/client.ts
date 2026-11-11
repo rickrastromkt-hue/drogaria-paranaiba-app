@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { auth } from "./firebase";
 
+/** uid de "quem está atendendo" (computador compartilhado); enviado em todas as chamadas. */
+let actingHeader: string | null = null;
+export function setActingHeader(uid: string | null) {
+  actingHeader = uid;
+}
+
 export async function api<T = { ok: boolean }>(path: string, body?: unknown, method = "POST"): Promise<T> {
   const token = await auth().currentUser?.getIdToken();
   const res = await fetch(path, {
@@ -10,6 +16,7 @@ export async function api<T = { ok: boolean }>(path: string, body?: unknown, met
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(actingHeader ? { "X-Acting-As": actingHeader } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });

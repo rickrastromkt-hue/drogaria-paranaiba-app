@@ -29,6 +29,7 @@ export interface Ticket {
   closedAt?: number | null;
   closedBy?: ClosedBy | null;
   closedByName?: string | null;
+  closedByUid?: string | null;
   lastMessageAt: number;
   lastMessagePreview: string;
   lastMessageFromMe: boolean;
@@ -64,8 +65,10 @@ export interface Message {
   mimeType?: string | null;
   agentUid?: string | null;
   agentName?: string | null;
-  /** Nome que o cliente viu na assinatura, quando diferente de quem enviou. */
+  /** (antigo) Nome que o cliente viu na assinatura, quando diferente de quem enviou. */
   signedAs?: string | null;
+  /** Conta que estava logada, quando diferente de quem atendeu (computador compartilhado). */
+  viaName?: string | null;
   status?: MessageStatus | null;
   createdAt: number;
 }

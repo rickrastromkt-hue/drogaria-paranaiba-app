@@ -26,6 +26,24 @@ export async function requireStaff(req: Request, opts: { admin?: boolean } = {})
   return { ...user, uid };
 }
 
+/** Quem está logado (real) e em nome de quem está agindo (agent). */
+export type Actor = { real: StaffUser; agent: StaffUser };
+
+/**
+ * Computador compartilhado: um administrador pode escolher "quem está atendendo agora".
+ * O navegador envia o header X-Acting-As com o uid escolhido; tudo é registrado no nome dele.
+ */
+export async function requireActor(req: Request): Promise<Actor> {
+  const real = await requireStaff(req);
+  const as = req.headers.get("x-acting-as");
+  if (!as || as === real.uid) return { real, agent: real };
+  if (real.role !== "admin") throw new HttpError(403, "Apenas administradores podem atender em nome de outra pessoa");
+  const snap = await adminDb().doc(`users/${as}`).get();
+  const data = snap.data() as StaffUser | undefined;
+  if (!data || !data.active) throw new HttpError(400, "O atendente escolhido está inativo. Troque em \"Quem está atendendo\".");
+  return { real, agent: { ...data, uid: as } };
+}
+
 export function handler<A extends unknown[]>(fn: (...args: A) => Promise<unknown>) {
   return async (...args: A) => {
     try {
