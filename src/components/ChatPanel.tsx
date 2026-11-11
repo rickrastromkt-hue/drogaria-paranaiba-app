@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { ArrowLeft, ArrowRightLeft, BadgeCheck, Camera, CheckCircle2, Mic, Hand, Loader2, Paperclip, SendHorizontal, Timer, Trash2, UserRound, X } from "lucide-react";
 import { ImagePlus, MoreVertical } from "lucide-react";
-import { db } from "@/lib/firebase";
-import { MAX_UPLOAD_BYTES, api, blobToDataUrl, compressImage, duration, formatPhone, useNow } from "@/lib/client";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
+import { MAX_UPLOAD_BYTES, api, blobToDataUrl, duration, formatPhone, useNow } from "@/lib/client";
 import { canDelegate, type Contact, type Message, type QuickReply, type StaffUser, type Ticket } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
@@ -147,19 +148,36 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     });
   }
 
-  /** Envia o arquivo em base64 direto para o WhatsApp (sem Firebase Storage). */
+  /**
+   * Envia um arquivo pelo WhatsApp.
+   * - Áudio: vai em base64 direto para a Z-API (cópia guardada no Firestore).
+   * - Imagem, vídeo e documento: sobem para o Firebase Storage, sem redução e sem limite no sistema.
+   */
   async function uploadAndSend(file: Blob, fileName: string, caption = "") {
     const mime = file.type || "application/octet-stream";
     const type = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "document";
-    const body = type === "image" ? await compressImage(file) : file;
-    if (body.size > MAX_UPLOAD_BYTES) throw new Error("Arquivo grande demais (máx. 3 MB).");
-    const dataUrl = await blobToDataUrl(body);
+    let mediaUrl: string;
+    if (type === "audio") {
+      if (file.size > MAX_UPLOAD_BYTES) throw new Error("Áudio grande demais (máx. 3 MB).");
+      mediaUrl = await blobToDataUrl(file);
+    } else {
+      const safeName = fileName.replace(/[^\w.\-]+/g, "_");
+      const r = storageRef(storage(), `uploads/${ticket.id}/${Date.now()}-${safeName}`);
+      try {
+        await uploadBytes(r, file, { contentType: mime });
+      } catch (e) {
+        const code = (e as { code?: string }).code || "";
+        if (code.includes("unauthorized")) throw new Error("O Storage recusou o arquivo. Confira as regras do Storage no Firebase.");
+        throw new Error("Não foi possível subir o arquivo. Confira se o Storage está ativado no Firebase.");
+      }
+      mediaUrl = await getDownloadURL(r);
+    }
     await api(`/api/tickets/${ticket.id}/send`, {
       type,
       text: type === "image" || type === "video" ? caption : "",
-      mediaUrl: dataUrl,
-      fileName: type === "image" && body !== file ? fileName.replace(/\.\w+$/, "") + ".jpg" : fileName,
-      mimeType: body.type || mime,
+      mediaUrl,
+      fileName,
+      mimeType: mime,
     });
     return type;
   }
@@ -181,7 +199,6 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     e.target.value = "";
     if (!file) return;
     if (file.type.startsWith("image/")) return pickPhoto(file); // fotos: mostra a prévia antes de enviar
-    if (file.size > MAX_UPLOAD_BYTES) return setError("Arquivo grande demais (máx. 3 MB).");
     run("send", () => uploadAndSend(file, file.name));
   }
 

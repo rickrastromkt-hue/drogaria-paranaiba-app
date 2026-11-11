@@ -13,7 +13,7 @@ Tempo estimado: **30 minutos**.
 2. **Authentication → Começar →** ative **E-mail/senha**.
 3. **Firestore Database → Criar banco →** modo **produção**, região `southamerica-east1` (São Paulo).
 4. **Firestore → Regras:** cole o conteúdo de [`firestore.rules`](firestore.rules) e clique em **Publicar**.
-5. **Não é preciso ativar o Storage:** fotos, áudios e arquivos enviados pela empresa vão em base64 para a Z-API, e uma cópia fica no próprio Firestore (até 3 MB por arquivo).
+5. **Storage → Começar** e, em **Regras**, cole [`storage.rules`](storage.rules). É onde ficam as imagens, vídeos e documentos enviados pela empresa (os áudios vão em base64 e não usam o Storage).
 6. **⚙️ Configurações do projeto → Seus apps → Web (`</>`)**: registre o app e copie os valores de `firebaseConfig`.
 7. **⚙️ Configurações do projeto → Contas de serviço → Gerar nova chave privada:** baixa um `.json`.
    Use `project_id`, `client_email` e `private_key` dele. **Nunca envie esse arquivo para o GitHub.**

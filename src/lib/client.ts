@@ -88,6 +88,7 @@ export function playNotification() {
 
 /* ---------- Arquivos em base64 ---------- */
 
+/** Limite só para áudio em base64 (tamanho máximo de requisição da Vercel). */
 export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 
 export function blobToDataUrl(blob: Blob): Promise<string> {
@@ -97,32 +98,4 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
     r.onerror = () => reject(new Error("Não foi possível ler o arquivo"));
     r.readAsDataURL(blob);
   });
-}
-
-/** Reduz fotos grandes (máx. 1600 px, JPEG) para enviar rápido e caber no limite. */
-export async function compressImage(file: Blob, max = 1600, quality = 0.85): Promise<Blob> {
-  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => {
-      const i = new Image();
-      i.onload = () => res(i);
-      i.onerror = rej;
-      i.src = url;
-    });
-    const scale = Math.min(1, max / Math.max(img.width, img.height));
-    if (scale === 1 && file.size < 900_000) return file;
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.width * scale);
-    c.height = Math.round(img.height * scale);
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    return await new Promise<Blob>((res) => c.toBlob((b) => res(b || file), "image/jpeg", quality));
-  } catch {
-    return file;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
