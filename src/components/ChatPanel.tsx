@@ -7,10 +7,10 @@ import { ImagePlus } from "lucide-react";
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { MAX_UPLOAD_BYTES, api, blobToDataUrl, duration, formatPhone, useNow } from "@/lib/client";
-import { canDelegate, type Contact, type Message, type MessageType, type QuickReply, type StaffUser, type Ticket } from "@/lib/types";
+import { canDelegate, type Contact, type Message, type MessageType, type QuickReply, type ReplyRef, type StaffUser, type Ticket } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
-import { MessageBubble } from "./MessageBubble";
+import { MessageBubble, QuoteBlock } from "./MessageBubble";
 import { ContactForm } from "./ContactForm";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { AssignModal } from "./AssignModal";
@@ -27,6 +27,22 @@ type Props = {
   /** Mostra um X no cabeçalho (usado na gaveta do Histórico). */
   onClose?: () => void;
 };
+
+/** Resumo de uma mensagem para a citação (ex.: "📷 Imagem · legenda"). */
+function previewOf(type: MessageType, text: string) {
+  const labels: Partial<Record<MessageType, string>> = {
+    image: "📷 Imagem",
+    audio: "🎤 Áudio",
+    video: "🎬 Vídeo",
+    document: "📄 Documento",
+    sticker: "Figurinha",
+    location: "📍 Localização",
+    contact: "👤 Contato",
+  };
+  const label = labels[type];
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  return (label ? (clean ? `${label} · ${clean}` : label) : clean).slice(0, 160);
+}
 
 function dayLabel(ts: number) {
   const d = new Date(ts);
@@ -142,7 +158,8 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     progress?: number; // 0–100 (upload de foto/vídeo)
     error?: string;
     createdAt: number;
-    job: (onProgress: (p: number) => void) => Promise<unknown>;
+    replyTo?: ReplyRef | null;
+    job: (onProgress: (p: number) => void, replyToId?: string) => Promise<unknown>;
   };
   const [outbox, setOutbox] = useState<Outbox[]>([]);
 
@@ -168,8 +185,27 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     }
   }
 
+  // Mensagem sendo respondida (arrastar para o lado / botão Responder)
+  const [replyTo, setReplyTo] = useState<ReplyRef | null>(null);
+  function startReply(m: Message) {
+    const author = m.source === "customer" ? ticket.contactName : m.agentName || (m.source === "bot" ? "Mensagem automática" : "Você");
+    setReplyTo({ id: m.id, source: m.source, type: m.type, text: previewOf(m.type, m.text), author });
+    setTimeout(() => textarea.current?.focus(), 30);
+  }
+
   function enqueue(type: MessageType, textValue: string, localUrl: string | null, job: Outbox["job"], fileName?: string) {
-    const o: Outbox = { key: `out-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, type, text: textValue, localUrl, fileName, createdAt: Date.now(), job };
+    const quote = replyTo;
+    setReplyTo(null);
+    const o: Outbox = {
+      key: `out-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type,
+      text: textValue,
+      localUrl,
+      fileName,
+      createdAt: Date.now(),
+      replyTo: quote,
+      job: (onP) => job(onP, quote?.id),
+    };
     setOutbox((list) => [...list, o]);
     setError("");
     setTimeout(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), 30);
@@ -182,13 +218,13 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       const p = pendingPhoto;
       setPendingPhoto(null); // a prévia vira a bolha "enviando"
       setText("");
-      enqueue("image", t, p.preview, (onP) => uploadAndSend(p.file, p.name, t, onP), p.name);
+      enqueue("image", t, p.preview, (onP, rid) => uploadAndSend(p.file, p.name, t, onP, rid), p.name);
       textarea.current?.focus();
       return;
     }
     if (!t) return;
     setText("");
-    enqueue("text", t, null, () => api(`/api/tickets/${ticket.id}/send`, { type: "text", text: t }));
+    enqueue("text", t, null, (_p, rid) => api(`/api/tickets/${ticket.id}/send`, { type: "text", text: t, ...(rid ? { replyToId: rid } : {}) }));
     textarea.current?.focus();
   }
 
@@ -197,7 +233,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
    * - Áudio: vai em base64 direto para a Z-API (cópia guardada no Firestore).
    * - Imagem, vídeo e documento: sobem para o Firebase Storage (com progresso), sem limite no sistema.
    */
-  async function uploadAndSend(file: Blob, fileName: string, caption = "", onProgress?: (p: number) => void) {
+  async function uploadAndSend(file: Blob, fileName: string, caption = "", onProgress?: (p: number) => void, replyToId?: string) {
     const mime = file.type || "application/octet-stream";
     const type = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "document";
     let mediaUrl: string;
@@ -231,6 +267,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
       mediaUrl,
       fileName,
       mimeType: mime,
+      ...(replyToId ? { replyToId } : {}),
     });
     return type;
   }
@@ -253,12 +290,12 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
     if (!file) return;
     if (file.type.startsWith("image/")) return pickPhoto(file); // fotos: mostra a prévia antes de enviar
     const type: MessageType = file.type.startsWith("video/") ? "video" : "document";
-    enqueue(type, "", URL.createObjectURL(file), (onP) => uploadAndSend(file, file.name, "", onP), file.name);
+    enqueue(type, "", URL.createObjectURL(file), (onP, rid) => uploadAndSend(file, file.name, "", onP, rid), file.name);
   }
 
   const sendVoice = (mp3: Blob) => {
     const name = `audio-${Date.now()}.mp3`;
-    enqueue("audio", "", URL.createObjectURL(mp3), () => uploadAndSend(mp3, name), name);
+    enqueue("audio", "", URL.createObjectURL(mp3), (_p, rid) => uploadAndSend(mp3, name, "", undefined, rid), name);
   };
 
 
@@ -381,7 +418,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
                   <span className="rounded-lg bg-white px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">{day}</span>
                 </div>
               )}
-              <MessageBubble m={m} />
+              <MessageBubble m={m} onReply={canAct ? startReply : undefined} />
             </div>
           );
         })}
@@ -398,6 +435,7 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
               agentName: staff?.name ?? null,
               status: o.error ? "failed" : "pending",
               createdAt: o.createdAt,
+              replyTo: o.replyTo ?? null,
             }}
             sending={{ progress: o.progress, error: o.error, onRetry: () => runOut(o), onDiscard: () => dropOut(o.key) }}
           />
@@ -442,6 +480,16 @@ export function ChatPanel({ ticket, team = [], quickReplies = [], autoCloseMinut
                   <div className="truncate text-sm text-slate-600">{q.text}</div>
                 </button>
               ))}
+            </div>
+          )}
+          {replyTo && !recording && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 pl-2">
+              <div className="min-w-0 flex-1">
+                <QuoteBlock q={replyTo} compact />
+              </div>
+              <button onClick={() => setReplyTo(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-accent-600" title="Cancelar resposta">
+                <X className="h-4 w-4" />
+              </button>
             </div>
           )}
           {pendingPhoto && !recording && (

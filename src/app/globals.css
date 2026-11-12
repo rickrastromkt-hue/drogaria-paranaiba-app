@@ -121,3 +121,12 @@ body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Destaque ao pular para a mensagem citada */
+.msg-flash {
+  animation: msgFlash 1.4s ease-out;
+}
+@keyframes msgFlash {
+  0%, 40% { background-color: rgba(250, 204, 21, 0.28); }
+  100% { background-color: transparent; }
+}

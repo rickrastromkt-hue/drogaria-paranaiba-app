@@ -36,15 +36,18 @@ export interface SendResult {
 }
 
 export const zapi = {
-  sendText: (phone: string, message: string) => call<SendResult>("POST", "/send-text", { phone, message }),
-  sendImage: (phone: string, image: string, caption?: string) =>
-    call<SendResult>("POST", "/send-image", { phone, image, caption }),
-  sendVideo: (phone: string, video: string, caption?: string) =>
-    call<SendResult>("POST", "/send-video", { phone, video, caption }),
-  sendAudio: (phone: string, audio: string) => call<SendResult>("POST", "/send-audio", { phone, audio, waveform: true }),
-  sendDocument: (phone: string, document: string, fileName: string) => {
+  // messageId (opcional) = responder citando essa mensagem, como no WhatsApp
+  sendText: (phone: string, message: string, messageId?: string) =>
+    call<SendResult>("POST", "/send-text", { phone, message, ...(messageId ? { messageId } : {}) }),
+  sendImage: (phone: string, image: string, caption?: string, messageId?: string) =>
+    call<SendResult>("POST", "/send-image", { phone, image, caption, ...(messageId ? { messageId } : {}) }),
+  sendVideo: (phone: string, video: string, caption?: string, messageId?: string) =>
+    call<SendResult>("POST", "/send-video", { phone, video, caption, ...(messageId ? { messageId } : {}) }),
+  sendAudio: (phone: string, audio: string, messageId?: string) =>
+    call<SendResult>("POST", "/send-audio", { phone, audio, waveform: true, ...(messageId ? { messageId } : {}) }),
+  sendDocument: (phone: string, document: string, fileName: string, messageId?: string) => {
     const ext = (fileName.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
-    return call<SendResult>("POST", `/send-document/${ext}`, { phone, document, fileName });
+    return call<SendResult>("POST", `/send-document/${ext}`, { phone, document, fileName, ...(messageId ? { messageId } : {}) });
   },
   /** Botões de resposta rápida (depende do WhatsApp do cliente exibir). */
   sendButtons: (phone: string, message: string, buttons: { id: string; label: string }[]) =>
@@ -95,6 +98,8 @@ export interface ZapiReceived {
   buttonsResponseMessage?: { message?: string; buttonId?: string };
   listResponseMessage?: { message?: string; title?: string; selectedRowId?: string };
   reaction?: unknown;
+  /** Mensagem citada pelo cliente (resposta). */
+  referenceMessageId?: string;
 }
 
 export interface ZapiStatus {

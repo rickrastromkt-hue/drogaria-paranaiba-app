@@ -1,9 +1,10 @@
 "use client";
 
-import { Bot, Check, CheckCheck, Clock, Loader2, MapPin, RotateCcw, Smartphone, User, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Bot, Check, CheckCheck, Clock, Loader2, MapPin, Reply, RotateCcw, Smartphone, User, X } from "lucide-react";
 import { AudioPlayer, DocumentMessage, ImageMessage } from "./Media";
 import { WhatsappText } from "./WhatsappText";
-import type { Message } from "@/lib/types";
+import type { Message, ReplyRef } from "@/lib/types";
 import { formatTime } from "@/lib/client";
 
 function StatusIcon({ status }: { status?: Message["status"] }) {
@@ -73,7 +74,37 @@ function UploadingMedia({ m, sending }: { m: Message; sending: Sending }) {
   );
 }
 
-export function MessageBubble({ m, sending }: { m: Message; sending?: Sending }) {
+/** Bloco da mensagem citada (dentro da bolha ou acima do campo de texto). */
+export function QuoteBlock({ q, onClick, compact }: { q: ReplyRef; onClick?: () => void; compact?: boolean }) {
+  const isCustomer = q.source === "customer";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`block w-full min-w-0 rounded-lg border-l-4 bg-black/[0.05] px-2.5 py-1.5 text-left transition hover:bg-black/[0.08] ${
+        isCustomer ? "border-accent-500" : "border-brand-500"
+      } ${compact ? "" : "mb-1"}`}
+    >
+      <div className={`truncate text-[11px] font-semibold ${isCustomer ? "text-accent-600" : "text-brand-700"}`}>{q.author}</div>
+      <div className="line-clamp-2 text-xs text-slate-600">{q.text || "Mensagem"}</div>
+    </button>
+  );
+}
+
+/** Rola até a mensagem citada e destaca por um instante. */
+function jumpTo(id: string) {
+  const el = document.getElementById(`msg-${id}`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("msg-flash");
+  setTimeout(() => el.classList.remove("msg-flash"), 1400);
+}
+
+const SWIPE_TRIGGER = 56;
+
+export function MessageBubble({ m, sending, onReply }: { m: Message; sending?: Sending; onReply?: (m: Message) => void }) {
+  const [dx, setDx] = useState(0);
+  const start = useRef<{ x: number; y: number; active: boolean } | null>(null);
   if (m.source === "system")
     return (
       <div className="my-2 flex justify-center">
@@ -95,9 +126,61 @@ export function MessageBubble({ m, sending }: { m: Message; sending?: Sending })
         {m.viaName ? <span className="font-normal text-slate-400"> · via {m.viaName}</span> : null}</span>
     ) : null;
 
+  // Arrastar para a direita (toque) = responder, como no WhatsApp
+  const canSwipe = !!onReply && !sending;
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!canSwipe || e.pointerType !== "touch") return;
+    start.current = { x: e.clientX, y: e.clientY, active: false };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const s = start.current;
+    if (!s) return;
+    const mx = e.clientX - s.x;
+    const my = e.clientY - s.y;
+    if (!s.active) {
+      if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) return void (start.current = null); // rolagem vertical
+      if (mx > 10) s.active = true;
+    }
+    if (s.active) setDx(Math.max(0, Math.min(90, mx)));
+  };
+  const onPointerEnd = () => {
+    if (start.current?.active && dx >= SWIPE_TRIGGER) {
+      onReply?.(m);
+      if (navigator.vibrate) navigator.vibrate(15);
+    }
+    start.current = null;
+    setDx(0);
+  };
+
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <div
+      id={`msg-${m.id}`}
+      className={`group relative flex items-center gap-1 rounded-xl ${mine ? "justify-end" : "justify-start"}`}
+      style={{ touchAction: "pan-y" }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+    >
+      {canSwipe && (
+        <span
+          className="pointer-events-none absolute left-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white text-slate-500 shadow"
+          style={{ opacity: Math.min(1, dx / SWIPE_TRIGGER), transform: `translateY(-50%) scale(${0.6 + Math.min(1, dx / SWIPE_TRIGGER) * 0.4})` }}
+        >
+          <Reply className="h-4 w-4" />
+        </span>
+      )}
+      {canSwipe && mine && (
+        <button
+          onClick={() => onReply?.(m)}
+          className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/90 text-slate-400 opacity-0 shadow-sm transition hover:text-brand-700 group-hover:opacity-100 md:flex"
+          title="Responder"
+        >
+          <Reply className="h-3.5 w-3.5" />
+        </button>
+      )}
       <div
+        style={dx ? { transform: `translateX(${dx}px)` } : { transition: "transform .18s ease-out" }}
         className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-sm ${sending?.error ? "ring-1 ring-accent-200" : ""} ${
           mine
             ? m.source === "bot"
@@ -107,6 +190,7 @@ export function MessageBubble({ m, sending }: { m: Message; sending?: Sending })
         }`}
       >
         {tag && <div className="mb-0.5 text-[11px] font-medium text-slate-500">{tag}</div>}
+        {m.replyTo && <QuoteBlock q={m.replyTo} onClick={() => jumpTo(m.replyTo!.id)} />}
         {sending && (m.type === "image" || m.type === "video") && m.mediaUrl ? <UploadingMedia m={m} sending={sending} /> : <Media m={m} mine={mine} />}
         {m.text && <WhatsappText text={m.text} />}
         <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
@@ -125,6 +209,15 @@ export function MessageBubble({ m, sending }: { m: Message; sending?: Sending })
           </div>
         )}
       </div>
+      {canSwipe && !mine && (
+        <button
+          onClick={() => onReply?.(m)}
+          className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/90 text-slate-400 opacity-0 shadow-sm transition hover:text-brand-700 group-hover:opacity-100 md:flex"
+          title="Responder"
+        >
+          <Reply className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }

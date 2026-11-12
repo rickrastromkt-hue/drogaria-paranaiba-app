@@ -14,6 +14,7 @@ import {
   type Contact,
   type Message,
   type MessageType,
+  type ReplyRef,
   type Settings,
   type StaffUser,
   type Ticket,
@@ -53,21 +54,24 @@ type Outgoing = {
   mediaUrl?: string | null;
   fileName?: string | null;
   mimeType?: string | null;
+  /** Responder citando esta mensagem (id do WhatsApp/Z-API). */
+  replyTo?: ReplyRef | null;
 };
 
 async function deliver(phone: string, msg: Outgoing, signature?: string) {
   const signed = signature && msg.text ? `*${signature}:*\n${msg.text}` : msg.text;
+  const q = msg.replyTo?.id || undefined;
   switch (msg.type) {
     case "text":
-      return zapi.sendText(phone, signed);
+      return zapi.sendText(phone, signed, q);
     case "image":
-      return zapi.sendImage(phone, msg.mediaUrl!, signed || undefined);
+      return zapi.sendImage(phone, msg.mediaUrl!, signed || undefined, q);
     case "video":
-      return zapi.sendVideo(phone, msg.mediaUrl!, signed || undefined);
+      return zapi.sendVideo(phone, msg.mediaUrl!, signed || undefined, q);
     case "audio":
-      return zapi.sendAudio(phone, msg.mediaUrl!);
+      return zapi.sendAudio(phone, msg.mediaUrl!, q);
     case "document":
-      return zapi.sendDocument(phone, msg.mediaUrl!, msg.fileName || "arquivo.pdf");
+      return zapi.sendDocument(phone, msg.mediaUrl!, msg.fileName || "arquivo.pdf", q);
     default:
       throw new HttpError(400, "Tipo de mensagem não suportado");
   }
@@ -103,6 +107,7 @@ export async function sendOutbound(
     agentUid: opts.agent?.uid ?? null,
     agentName: opts.agent?.name ?? null,
     viaName: opts.viaName ?? null,
+    replyTo: msg.replyTo ?? null,
     status: "sent",
     createdAt: now,
   };
@@ -117,6 +122,18 @@ export async function sendOutbound(
   });
   await batch.commit();
   return id;
+}
+
+/** Monta a cópia resumida de uma mensagem para citação. */
+function replyRefOf(id: string, m: Partial<Message> | undefined, contactName: string): ReplyRef | null {
+  if (!m || m.source === "system") return null;
+  const author = m.source === "customer" ? contactName : m.agentName || (m.source === "bot" ? "Mensagem automática" : "Você");
+  return { id, source: m.source as Message["source"], type: (m.type as MessageType) || "text", text: previewOf((m.type as MessageType) || "text", m.text || "").slice(0, 160), author };
+}
+
+export async function loadReplyRef(ticketId: string, messageId: string) {
+  const [s, tk] = await Promise.all([ticketRef(ticketId).collection("messages").doc(safeId(messageId)).get(), ticketRef(ticketId).get()]);
+  return s.exists ? replyRefOf(s.id, s.data() as Message, (tk.data() as Ticket | undefined)?.contactName || "Cliente") : null;
 }
 
 function addSystemNote(ref: DocumentReference, text: string) {
@@ -191,6 +208,13 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
       if (dup.exists) return { action: "none", ticketId: ref.id };
     }
 
+    // Cliente respondeu citando uma mensagem? guarda a citação para exibir
+    let quoted: ReplyRef | null = null;
+    if (ref && p.referenceMessageId) {
+      const q = await tx.get(ref.collection("messages").doc(safeId(p.referenceMessageId)));
+      if (q.exists) quoted = replyRefOf(q.id, q.data() as Message, name);
+    }
+
     // Cliente voltou pouco depois de encerrar: reabre o MESMO atendimento (sem menu, sem novo protocolo).
     let reopen: Record<string, unknown> | null = null;
     const reopenMs = Math.max(0, Number(settings.reopenHours) || 0) * 3_600_000;
@@ -219,7 +243,7 @@ export async function handleReceived(p: ZapiReceived): Promise<ReceivedResult | 
     // Todas as leituras antes de qualquer escrita (regra das transações do Firestore).
     const counterSnap = !ref ? await tx.get(counterRef) : null;
 
-    const incoming: PendingMessage = { id: msgId, ...content, createdAt: now };
+    const incoming: PendingMessage = { id: msgId, ...content, createdAt: now, ...(quoted ? { replyTo: quoted } : {}) };
     let backlog: PendingMessage[] = [];
 
     /* ---------- Menu inicial (só quando não há atendimento aberto) ---------- */
@@ -462,7 +486,7 @@ export async function startConversation(actor: Actor, rawPhone: string, text: st
 
 const MENU_TTL = 30 * 60_000; // menu sem resposta expira em 30 min
 
-type PendingMessage = ReturnType<typeof parseContent> & { id: string; createdAt: number };
+type PendingMessage = NonNullable<ReturnType<typeof parseContent>> & { id: string; createdAt: number; replyTo?: ReplyRef | null };
 type MenuState = { pendingSince?: number | null; pending?: PendingMessage[]; financeAt?: number | null };
 
 export type ReceivedResult = {

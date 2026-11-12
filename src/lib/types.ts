@@ -61,6 +61,15 @@ export type MessageSource = "customer" | "agent" | "bot" | "phone" | "system";
 
 export type MessageStatus = "pending" | "sent" | "received" | "read" | "played" | "failed";
 
+/** Mensagem citada numa resposta (cópia resumida para exibir). */
+export interface ReplyRef {
+  id: string;
+  source: MessageSource;
+  type: MessageType;
+  text: string;
+  author: string;
+}
+
 export interface Message {
   id: string;
   source: MessageSource;
@@ -75,6 +84,8 @@ export interface Message {
   signedAs?: string | null;
   /** Conta que estava logada, quando diferente de quem atendeu (computador compartilhado). */
   viaName?: string | null;
+  /** Resposta citando outra mensagem. */
+  replyTo?: ReplyRef | null;
   status?: MessageStatus | null;
   createdAt: number;
 }

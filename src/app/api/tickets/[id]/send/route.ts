@@ -1,10 +1,10 @@
 import { HttpError, handler, readJson, requireActor } from "@/lib/api";
-import { agentSend } from "@/lib/tickets";
+import { agentSend, loadReplyRef } from "@/lib/tickets";
 import { MAX_MEDIA_BYTES, parseDataUrl } from "@/lib/mediaStore";
 import type { MessageType } from "@/lib/types";
 
 type Ctx = { params: Promise<{ id: string }> };
-type Body = { type?: MessageType; text?: string; mediaUrl?: string; fileName?: string; mimeType?: string };
+type Body = { type?: MessageType; text?: string; mediaUrl?: string; fileName?: string; mimeType?: string; replyToId?: string };
 
 const ALLOWED: MessageType[] = ["text", "image", "audio", "video", "document"];
 
@@ -18,7 +18,10 @@ export const POST = handler(async (req: Request, { params }: Ctx) => {
     if (!parsed) throw new HttpError(400, "Arquivo inválido");
     if ((parsed.base64.length * 3) / 4 > MAX_MEDIA_BYTES) throw new HttpError(413, "Arquivo grande demais (máx. 3 MB)");
   }
-  const id = await agentSend((await params).id, actor, {
+  const ticketId = (await params).id;
+  const replyTo = b.replyToId ? await loadReplyRef(ticketId, b.replyToId).catch(() => null) : null;
+  const id = await agentSend(ticketId, actor, {
+    replyTo,
     type,
     text: String(b.text || "").slice(0, 4000),
     mediaUrl: b.mediaUrl || null,
